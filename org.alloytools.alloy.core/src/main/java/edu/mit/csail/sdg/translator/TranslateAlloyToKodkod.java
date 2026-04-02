@@ -675,6 +675,7 @@ public final class TranslateAlloyToKodkod extends VisitReturn<Object> {
             if (opt.solver.trace() > 0) {
 
                 String stem = cmd.label.replace(' ', '_').replace('$', '-');
+                System.setProperty("hypermcs.stem", stem);
 
                 TraceModels trace = new TraceModels(rep, sigs, cmd, opt);
 
@@ -749,6 +750,8 @@ public final class TranslateAlloyToKodkod extends VisitReturn<Object> {
 
                 for (Relation r : tsets_l.keySet())
                     tr_spec.bounds.bound(r, tsets_l.get(r), tsets_u.get(r));
+                
+                System.setProperty("hypermcs.quants", trace.quants());
 
                 A4Solution sol = tr_spec.solve(rep, cmd, new Simplifier(), true, last);
 

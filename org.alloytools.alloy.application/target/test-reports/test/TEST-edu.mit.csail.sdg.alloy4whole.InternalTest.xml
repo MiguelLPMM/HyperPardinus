@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="edu.mit.csail.sdg.alloy4whole.InternalTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-01-03T02:13:20" hostname="miguellpmm-VirtualBox" time="0.759">
+  <properties/>
+  <testcase name="test1Ele" classname="edu.mit.csail.sdg.alloy4whole.InternalTest" time="0.702"/>
+  <testcase name="test2Ele" classname="edu.mit.csail.sdg.alloy4whole.InternalTest" time="0.031"/>
+  <testcase name="test3Ele" classname="edu.mit.csail.sdg.alloy4whole.InternalTest" time="0.003"/>
+  <testcase name="test1" classname="edu.mit.csail.sdg.alloy4whole.InternalTest" time="0.0"/>
+  <testcase name="test2" classname="edu.mit.csail.sdg.alloy4whole.InternalTest" time="0.001"/>
+  <testcase name="test3" classname="edu.mit.csail.sdg.alloy4whole.InternalTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
+SLF4J: Defaulting to no-operation (NOP) logger implementation
+SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
+]]></system-err>
+</testsuite>

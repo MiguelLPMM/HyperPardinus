@@ -8,6 +8,8 @@ import java.io.FileReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -216,6 +218,12 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
             if (exitCode == 0) {
                 String smvName = tempDir.list((File dir, String name) -> name.endsWith(".smv"))[0];
                 File smvFile = new File(tempDir, smvName);
+                String stem = System.getProperty("hypermcs.stem");
+
+                if (dry) {
+                    File smv = new File(tempDir.getParentFile(), stem + ".smv");
+                    Files.copy(smvFile.toPath(), smv.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
 
                 if (!dry) {
 
@@ -228,63 +236,198 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
                     matcher = pattern.matcher(hpContent);
                     hpContent = matcher.replaceAll("$1$3[$2]");
                     hpContent = options.isLast().get(0) + "\n" + hpContent;
+                    int quantifiers = System.getProperty("hypermcs.quants").split("\\.").length - 1;
 
 
                     if (solver != null) {
-                        File hpFile = new File(tempDir, "prop.hp");
+                        File hpFile = new File(tempDir, stem + ".hp");
                         Files.write(hpFile.toPath(), hpContent.getBytes());
 
-                        // run hypersmv
+                        // // run hypersmv
+                        // File hs = NativeCode.platform.getExecutable("hypersmv").orElse(null);
+                        // args.clear();
+                        // args.add(hs.getAbsolutePath());
+                        // args.add("ah");
+                        // options.isLast().subList(4, options.isLast().size()).forEach(x -> args.add((String) x));
+
+                        // args.add("--informula=" + hpFile.getAbsolutePath());
+                        // args.add("--ahsolver=forq");
+                        // //                    args.add("--debug=True");
+                        // args.add("--witness=True");
+                        // args.add("--docker=hyperalloy/hypercheckers-arm64");
+
+                        // try (BufferedReader br = new BufferedReader(new FileReader("hypersmv.config"))) {
+                        //     String firstLine = br.readLine();
+                        //     args.addAll(Arrays.asList(firstLine.split(" ")));
+                        // } catch (Exception e) {
+                        // }
+
+
+                        // processBuilder = new ProcessBuilder(args);
+                        // process = processBuilder.start();
+                        // processBuilder.redirectErrorStream(true);
+                        // BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+
+                        // String line;
+                        // while ((line = reader.readLine()) != null) {
+                        //     line = line;
+                        // }
+                        // exitCode = process.waitFor();
+
+                        // HyperSMV
+                        File localFile  = new File(tempDir, stem + ".smv");
+                        Path smvPath = Path.of(tempDir.getParentFile().getAbsolutePath(), stem + ".smv");
+                        Files.copy(smvPath, localFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        
                         File hs = NativeCode.platform.getExecutable("hypersmv").orElse(null);
-                        args.clear();
-                        args.add(hs.getAbsolutePath());
-                        args.add("ah");
-                        options.isLast().subList(4, options.isLast().size()).forEach(x -> args.add((String) x));
-
-                        args.add("--informula=" + hpFile.getAbsolutePath());
-                        args.add("--ahsolver=forq");
-                        //                    args.add("--debug=True");
-                        args.add("--witness=True");
-                        args.add("--docker=hyperalloy/hypercheckers-arm64");
-
-                        try (BufferedReader br = new BufferedReader(new FileReader("hypersmv.config"))) {
-                            String firstLine = br.readLine();
-                            args.addAll(Arrays.asList(firstLine.split(" ")));
-                        } catch (Exception e) {
+                        List<String> argsHS = new ArrayList<String>();
+                        argsHS.add(hs.getAbsolutePath());
+                        argsHS.add("tomc");
+                        for (int i = 0; i < quantifiers; i++) {
+                            argsHS.add("-i");
+                            argsHS.add(localFile.getAbsolutePath());
+                        }
+                        List<String> outputFiles = new ArrayList<String>();
+                        for (int i = 0; i < quantifiers; i++) {
+                            argsHS.add("-o");
+                            String extension = (id() == "hyper.autohyper") ? "-ah.exp" : (id() == "hyper.hyperq") ? "-hq.smv" : ".err";
+                            File outputFile = new File(tempDir, stem + "-" + (char)('A' + i) + extension);
+                            argsHS.add(outputFile.getAbsolutePath());
+                            outputFiles.add(outputFile.getAbsolutePath());
+                        }
+                        if (id().equals("hyper.autohyper")) {
+                            argsHS.add("-H=AutoHyper");
+                        } else if (id().equals("hyper.hyperq")) {
+                            argsHS.add("-H=HyperQube");
+                        }                      
+                        argsHS.add("-I");
+                        argsHS.add(hpFile.getAbsolutePath());
+                        argsHS.add("-O");
+                        File formulaFile = new File(tempDir, id() == "hyper.autohyper" ? "formula.ah" : id() == "hyper.hyperq" ? "formula.hq" : "formula.err");
+                        argsHS.add(formulaFile.getAbsolutePath());
+                        reporter.debug("starting HyperSMV process with : " + argsHS);
+                        ProcessBuilder builderHS = new ProcessBuilder(argsHS);
+                        builderHS.directory(tempDir);
+                        builderHS.redirectErrorStream(true);
+                        Process processHS = builderHS.start();
+                        int exitHS = processHS.waitFor();
+                        if (exitHS != 0) {
+                            reporter.debug("hypersmv exited with code " + exitHS);
                         }
 
+                        // Solver in Docker
+                        List<String> argsDocker = new ArrayList<>();
+                        argsDocker.add("docker");
+                        argsDocker.add("run");
+                        argsDocker.add("--rm");
+                        argsDocker.add("-v");
+                        argsDocker.add(tempDir.getAbsolutePath() + ":/mnt");
+                        argsDocker.add("hugopacheco/hypercheckers-amd64");
 
-                        processBuilder = new ProcessBuilder(args);
-                        process = processBuilder.start();
-                        processBuilder.redirectErrorStream(true);
-                        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                            line = line;
+                        if (id().equals("hyper.autohyper")) {   // AutoHyper
+                            argsDocker.add("AutoHyper");
+                            argsDocker.add("--explicit");
+                        } else if (id().equals("hyper.hyperq")) {   // HyperQube
+                            argsDocker.add("hyperqb");
+                        } else {
+                            throw new RuntimeException("Unknown hyper solver: " + id());
                         }
-                        exitCode = process.waitFor();
-
-                        // run MC solver
-                        args.clear();
-                        File el = NativeCode.platform.getExecutable("electrod").orElse(null);
-                        args.add(el.getAbsolutePath());
-                        args.add("A.witness");
-                        File f = new File((String) options.isLast().get(1), "output.info");
-                        args.add("--bt");
-                        args.add(f.getAbsolutePath());
-
-                        processBuilder = new ProcessBuilder(args);
-                        process = processBuilder.start();
-                        processBuilder.redirectErrorStream(true);
-                        reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-
-                        while ((line = reader.readLine()) != null) {
-                            line = line;
+                        
+                        for (String path : outputFiles) {
+                            File expFile = new File(path);
+                            String fileName = expFile.getName();
+                            argsDocker.add("/mnt/" + fileName);
                         }
-                        exitCode = process.waitFor();
 
-                        File xmlFile = new File("A.xml");
+                        if (id().equals("hyper.autohyper")) {   // AutoHyper
+                            argsDocker.add("/mnt/formula.ah");
+                            argsDocker.add("--witness");
+                            reporter.debug("starting AutoHyper process with : " + argsDocker);
+                        } else if (id().equals("hyper.hyperq")) {   // HyperQube
+                            argsDocker.add("/mnt/formula.hq");
+                            argsDocker.add("3");    // Changeable?
+                            argsDocker.add("-pes");
+                            argsDocker.add("-find");
+                            reporter.debug("starting HyperQube process with : " + argsDocker);
+                        } else {
+                            throw new RuntimeException("Unknown hyper solver: " + id());
+                        }
+
+                        ProcessBuilder builderDocker = new ProcessBuilder(argsDocker);
+
+                        if (id().equals("hyper.autohyper")) {   // AutoHyper only
+                            File ahCexFile = new File(tempDir, "cex.ah");
+                            builderDocker.redirectOutput(
+                                ProcessBuilder.Redirect.to(ahCexFile)
+                            );
+                            builderDocker.redirectError(
+                                ProcessBuilder.Redirect.to(ahCexFile)
+                            );
+                        }
+                        
+                        Process processDocker = builderDocker.start();
+                        int exitDocker = processDocker.waitFor();
+                        if (exitDocker != 0) {
+                            reporter.debug("Docker exited with code " + exitDocker);
+                        }
+
+                        // Inst2SMV
+                        List<String> argsPython = new ArrayList<>();
+                        argsPython.add("python3");
+                        argsPython.add("./inst2smv.py");
+                        argsPython.add(id().equals("hyper.autohyper") ? "ah" : id().equals("hyper.hyperq") ? "hq" : null);
+                        argsPython.add("--dir");
+                        argsPython.add(tempDir.getAbsolutePath());
+                        argsPython.add("--stem");
+                        argsPython.add(stem);
+                        reporter.debug("starting inst2SMV process with : " + argsPython);
+                        ProcessBuilder builderPython = new ProcessBuilder(argsPython);
+                        builderPython.redirectErrorStream(true);
+                        builderPython.directory(new File("./inst2smv").getAbsoluteFile());
+                        Process processPython = builderPython.start();
+                        int exitPython = processPython.waitFor();
+                        if (exitPython != 0) {
+                            reporter.debug("inst2smv.py exited with code " + exitPython);
+                        }
+
+                        // // run MC solver
+                        // args.clear();
+                        // File el = NativeCode.platform.getExecutable("electrod").orElse(null);
+                        // args.add(el.getAbsolutePath());
+                        // args.add("A.witness");
+                        // File f = new File((String) options.isLast().get(1), "output.info");
+                        // args.add("--bt");
+                        // args.add(f.getAbsolutePath());
+
+                        // processBuilder = new ProcessBuilder(args);
+                        // process = processBuilder.start();
+                        // processBuilder.redirectErrorStream(true);
+                        // reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+
+                        // while ((line = reader.readLine()) != null) {
+                        //     line = line;
+                        // }
+                        // exitCode = process.waitFor();
+
+                        // Electrod --bt
+                        List<String> argsElectrod = new ArrayList<>();
+                        argsElectrod.add("electrod");
+                        File i2sOutFile = new File(tempDir, stem + "-" + "A" + ".out");
+                        File infoFile = new File((String) options.isLast().get(1), "output.info");
+                        argsElectrod.add(i2sOutFile.getAbsolutePath());
+                        argsElectrod.add("--bt");
+                        argsElectrod.add(infoFile.getAbsolutePath());
+                        reporter.debug("starting electrod --bt process with : " + argsElectrod);
+                        ProcessBuilder builderElectrod = new ProcessBuilder(argsElectrod);
+                        builderElectrod.redirectErrorStream(true);
+                        builderElectrod.directory(tempDir);
+                        Process processElectrod = builderElectrod.start();
+                        int exitElectrod = processElectrod.waitFor();
+                        if (exitElectrod != 0) {
+                            reporter.debug("electrod --bt exited with code " + exitElectrod);
+                        }
+
+                        File xmlFile = new File(tempDir, stem + "-" + "A" + ".xml");
                         String xmlLink = String.format("%05d.xml", bounds.integration);
                         File link = new File(tempDir, xmlLink);
                         Files.createLink(link.toPath(), xmlFile.toPath());
