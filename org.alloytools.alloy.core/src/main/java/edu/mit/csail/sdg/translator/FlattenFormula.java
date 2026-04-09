@@ -138,13 +138,13 @@ public class FlattenFormula extends VisitReturn<Expr> {
         if (negated) {
             negated = !negated;
             Expr l = x.left.accept(this);
-            Expr r = x.left.accept(this);
+            Expr r = x.right.accept(this);
             Expr c = x.cond.accept(this);
             negated = !negated;
             return ExprITE.make(x.pos, c, l, r).not();
         } else {
             Expr l = x.left.accept(this);
-            Expr r = x.left.accept(this);
+            Expr r = x.right.accept(this);
             Expr c = x.cond.accept(this);
             return ExprITE.make(x.pos, c, l, r);
         }
