@@ -245,7 +245,6 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
                         args.add("--ahsolver=forq");
                         //                    args.add("--debug=True");
                         args.add("--witness=True");
-                        args.add("--docker=hyperalloy/hypercheckers-arm64");
 
                         try (BufferedReader br = new BufferedReader(new FileReader("hypersmv.config"))) {
                             String firstLine = br.readLine();
