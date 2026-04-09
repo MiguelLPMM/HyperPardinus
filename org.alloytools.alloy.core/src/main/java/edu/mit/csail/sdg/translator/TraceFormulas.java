@@ -291,7 +291,10 @@ public class TraceFormulas extends VisitReturn<Expr> {
 
     @Override
     public Expr visit(ExprITE x) throws Err {
-        return (x.cond.implies(x.left)).and(x.cond.not().implies(x.right)).accept(this);
+        Expr lst1 = ExprList.makeOR(null, null, x.cond.not(), x.left);
+        Expr lst2 = ExprList.makeOR(null, null, x.cond, x.right);
+        Expr lst = ExprList.makeAND(null, null, lst1, lst2);
+        return lst.accept(this);
     }
 
     @Override
