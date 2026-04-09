@@ -138,7 +138,7 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
 
     @Override
     public String type() {
-        return "exteral";
+        return "external";
     }
 
 
@@ -209,7 +209,7 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
             args.add(eloFile.getAbsolutePath());
             processBuilder.redirectError(out);
             processBuilder.redirectOutput(out);
-            reporter.debug("starting electrod process with : " + args);
+            reporter.debug("starting forward electrod process with : " + args);
 
             process = processBuilder.start();
             exitCode = process.waitFor();

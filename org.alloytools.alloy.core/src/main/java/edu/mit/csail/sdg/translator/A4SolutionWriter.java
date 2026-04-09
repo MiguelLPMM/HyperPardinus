@@ -202,9 +202,8 @@ public final class A4SolutionWriter {
             for (Sig p : ((SubsetSig) x).parents)
                 Util.encodeXMLs(out, "   <type ID=\"", map(p), "\"/>\n");
         out.print("</sig>\n");
-        if (x.isTrace == null)
-            for (Field field : x.getFields())
-                writeField(field, state);
+        for (Field field : x.getFields())
+            writeField(field, state);
         return ts;
     }
 

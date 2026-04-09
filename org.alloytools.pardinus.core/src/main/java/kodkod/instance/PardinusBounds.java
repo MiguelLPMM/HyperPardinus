@@ -178,7 +178,7 @@ public class PardinusBounds extends Bounds {
     		return true;
         if (lowerBound(r).size() == upperBound(r).size())
             return true;
-        else if (rel2mults.get(r).a.equals(rel2mults.get(r).b)) {
+        else if (rel2mults.containsKey(r) && rel2mults.get(r).a.equals(rel2mults.get(r).b)) {
             for (Relation r2 : rel2mults.get(r).a.expr().accept(new RelationCollector(Collections.EMPTY_SET)))
                 if (!exactBounds(r2))
                     return false;
