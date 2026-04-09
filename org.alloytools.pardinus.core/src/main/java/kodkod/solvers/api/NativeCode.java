@@ -243,6 +243,7 @@ public class NativeCode {
 	private static Platform findPlatform() {
 		String os = System.getProperty("os.name");
 		String arch = System.getProperty("os.arch");
+		
 		for (Platform p : platforms) {
 			if (p.osarch.matcher(arch).matches() && p.osname.matcher(os).matches()) {
 				return platform = p;
