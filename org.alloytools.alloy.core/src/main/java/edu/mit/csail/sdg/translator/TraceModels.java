@@ -4,11 +4,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import edu.mit.csail.sdg.alloy4.A4Reporter;
 import edu.mit.csail.sdg.alloy4.Err;
@@ -32,7 +30,6 @@ import edu.mit.csail.sdg.ast.Func;
 import edu.mit.csail.sdg.ast.Sig;
 import edu.mit.csail.sdg.ast.Sig.Field;
 import edu.mit.csail.sdg.ast.Sig.PrimSig;
-import edu.mit.csail.sdg.ast.VisitQuery;
 import edu.mit.csail.sdg.ast.VisitReturn;
 import edu.mit.csail.sdg.parser.Macro;
 
@@ -202,41 +199,41 @@ public class TraceModels {
 
             Expr s = x.sub.accept(this);
             // hyperqb does not like formulas outside temporal operators
-            if (hol && s instanceof ExprList) {
-                List<Expr> args = new ArrayList<Expr>();
-                for (Expr e : ((ExprList) s).args) {
-                    boolean is_uny_temp = e instanceof ExprUnary && List.of(ExprUnary.Op.AFTER, ExprUnary.Op.BEFORE, ExprUnary.Op.ALWAYS, ExprUnary.Op.HISTORICALLY, ExprUnary.Op.EVENTUALLY, ExprUnary.Op.ONCE).contains(((ExprUnary) e).op);
-                    boolean is_bin_temp = e instanceof ExprBinary && List.of(ExprBinary.Op.UNTIL, ExprBinary.Op.SINCE, ExprBinary.Op.RELEASES, ExprBinary.Op.TRIGGERED).contains(((ExprBinary) e).op);
-                    if (!is_uny_temp && !is_bin_temp) {
-                        Set<Expr> var_elems = new HashSet<>();
-
-                        final VisitQuery<Object> q = new VisitQuery<Object>() {
-
-                            @Override
-                            public final Object visit(Sig x) {
-                                if (x.isVariable != null)
-                                    var_elems.add(x);
-                                return null;
-                            }
-
-                            @Override
-                            public final Object visit(Field x) {
-                                if (x.isVariable != null)
-                                    var_elems.add(x);
-                                return null;
-                            }
-
-                        };
-                        e.accept(q);
-                        if (var_elems.isEmpty())
-                            args.add(e.always());
-                        else
-                            args.add(e);
-                    } else
-                        args.add(e);
-                }
-                s = ExprList.make(s.pos, s.closingBracket, ((ExprList) s).op, args);
-            }
+            //            if (hol && s instanceof ExprList) {
+            //                List<Expr> args = new ArrayList<Expr>();
+            //                for (Expr e : ((ExprList) s).args) {
+            //                    boolean is_uny_temp = e instanceof ExprUnary && List.of(ExprUnary.Op.AFTER, ExprUnary.Op.BEFORE, ExprUnary.Op.ALWAYS, ExprUnary.Op.HISTORICALLY, ExprUnary.Op.EVENTUALLY, ExprUnary.Op.ONCE).contains(((ExprUnary) e).op);
+            //                    boolean is_bin_temp = e instanceof ExprBinary && List.of(ExprBinary.Op.UNTIL, ExprBinary.Op.SINCE, ExprBinary.Op.RELEASES, ExprBinary.Op.TRIGGERED).contains(((ExprBinary) e).op);
+            //                    if (!is_uny_temp && !is_bin_temp) {
+            //                        Set<Expr> var_elems = new HashSet<>();
+            //
+            //                        final VisitQuery<Object> q = new VisitQuery<Object>() {
+            //
+            //                            @Override
+            //                            public final Object visit(Sig x) {
+            //                                if (x.isVariable != null)
+            //                                    var_elems.add(x);
+            //                                return null;
+            //                            }
+            //
+            //                            @Override
+            //                            public final Object visit(Field x) {
+            //                                if (x.isVariable != null)
+            //                                    var_elems.add(x);
+            //                                return null;
+            //                            }
+            //
+            //                        };
+            //                        e.accept(q);
+            //                        if (var_elems.isEmpty())
+            //                            args.add(e.always());
+            //                        else
+            //                            args.add(e);
+            //                    } else
+            //                        args.add(e);
+            //                }
+            //                s = ExprList.make(s.pos, s.closingBracket, ((ExprList) s).op, args);
+            //            }
             if (decls.isEmpty())
                 return s;
             else
