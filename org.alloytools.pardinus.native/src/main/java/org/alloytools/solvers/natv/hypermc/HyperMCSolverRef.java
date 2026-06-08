@@ -400,6 +400,11 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
                         if (exitPython != 0) {
                             reporter.debug("inst2smv.py exited with code " + exitPython);
                         }
+                        
+                        // Number of traces in the counterexample
+                        int numTraces = (int) Files.list(tempDir.toPath())
+                            .filter(path -> path.getFileName().toString()
+                            .endsWith(".out")).count();
 
                         // // run MC solver
                         // args.clear();
@@ -421,21 +426,24 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
                         // exitCode = process.waitFor();
 
                         // Electrod --bt
-                        List<String> argsElectrod = new ArrayList<>();
-                        argsElectrod.add("electrod");
-                        File i2sOutFile = new File(tempDir, stem + "-" + "A" + ".out");
-                        File infoFile = new File((String) options.isLast().get(1), "output.info");
-                        argsElectrod.add(i2sOutFile.getAbsolutePath());
-                        argsElectrod.add("--bt");
-                        argsElectrod.add(infoFile.getAbsolutePath());
-                        reporter.debug("starting electrod --bt process with : " + argsElectrod);
-                        ProcessBuilder builderElectrod = new ProcessBuilder(argsElectrod);
-                        builderElectrod.redirectErrorStream(true);
-                        builderElectrod.directory(tempDir);
-                        Process processElectrod = builderElectrod.start();
-                        int exitElectrod = processElectrod.waitFor();
-                        if (exitElectrod != 0) {
-                            reporter.debug("electrod --bt exited with code " + exitElectrod);
+                        for (int i = 0; i < numTraces; i++) {
+                            List<String> argsElectrod = new ArrayList<>();
+                            argsElectrod.add("electrod");
+                            String traceId = String.valueOf((char)('A' + i));
+                            File i2sOutFile = new File(tempDir, stem + "-" + traceId + ".out");
+                            File infoFile = new File((String) options.isLast().get(1), "output.info");
+                            argsElectrod.add(i2sOutFile.getAbsolutePath());
+                            argsElectrod.add("--bt");
+                            argsElectrod.add(infoFile.getAbsolutePath());
+                            reporter.debug("starting electrod --bt process with : " + argsElectrod);
+                            ProcessBuilder builderElectrod = new ProcessBuilder(argsElectrod);
+                            builderElectrod.redirectErrorStream(true);
+                            builderElectrod.directory(tempDir);
+                            Process processElectrod = builderElectrod.start();
+                            int exitElectrod = processElectrod.waitFor();
+                            if (exitElectrod != 0) {
+                                reporter.debug("electrod --bt exited with code " + exitElectrod);
+                            }
                         }
 
                         File xmlFile = new File(tempDir, stem + "-" + "A" + ".xml");
