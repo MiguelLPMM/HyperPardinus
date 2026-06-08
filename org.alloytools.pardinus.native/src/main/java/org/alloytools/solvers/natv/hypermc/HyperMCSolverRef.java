@@ -51,6 +51,12 @@ import kodkod.solvers.api.NativeCode;
 import kodkod.solvers.api.TemporalSolverFactory;
 import kodkod.util.nodes.AnnotatedNode;
 
+import static edu.mit.csail.sdg.alloy4.A4Preferences.HyperQubeK;
+import static edu.mit.csail.sdg.alloy4.A4Preferences.HyperQubeSem;
+import static edu.mit.csail.sdg.alloy4.A4Preferences.AutoHyperSolver;
+import static edu.mit.csail.sdg.alloy4.A4Preferences.HyperSMVMaxDDSize;
+import static edu.mit.csail.sdg.alloy4.A4Preferences.HyperSMVAps;
+
 abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFactory {
 
     private static final long serialVersionUID = 1L;
@@ -305,6 +311,10 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
                         argsHS.add("-O");
                         File formulaFile = new File(tempDir, id() == "hyper.autohyper" ? "formula.ah" : id() == "hyper.hyperq" ? "formula.hq" : "formula.err");
                         argsHS.add(formulaFile.getAbsolutePath());
+                        argsHS.add("--maxddsize=" + HyperSMVMaxDDSize.get());
+                        if (id().equals("hyper.autohyper")) {
+                            argsHS.add("--aps=" + HyperSMVAps.get());
+                        }
                         reporter.debug("starting HyperSMV process with : " + argsHS);
                         ProcessBuilder builderHS = new ProcessBuilder(argsHS);
                         builderHS.directory(tempDir);
@@ -342,11 +352,12 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
                         if (id().equals("hyper.autohyper")) {   // AutoHyper
                             argsDocker.add("/mnt/formula.ah");
                             argsDocker.add("--witness");
+                            argsDocker.add("--incl-" + AutoHyperSolver.get());
                             reporter.debug("starting AutoHyper process with : " + argsDocker);
                         } else if (id().equals("hyper.hyperq")) {   // HyperQube
                             argsDocker.add("/mnt/formula.hq");
-                            argsDocker.add("3");    // Changeable?
-                            argsDocker.add("-pes");
+                            argsDocker.add(String.valueOf(HyperQubeK.get()));
+                            argsDocker.add("-" + HyperQubeSem.get());
                             argsDocker.add("-find");
                             reporter.debug("starting HyperQube process with : " + argsDocker);
                         } else {

@@ -15,6 +15,11 @@ import static edu.mit.csail.sdg.alloy4.A4Preferences.NoOverflow;
 import static edu.mit.csail.sdg.alloy4.A4Preferences.RecordKodkod;
 import static edu.mit.csail.sdg.alloy4.A4Preferences.SkolemDepth;
 import static edu.mit.csail.sdg.alloy4.A4Preferences.Solver;
+import static edu.mit.csail.sdg.alloy4.A4Preferences.HyperSMVMaxDDSize;
+import static edu.mit.csail.sdg.alloy4.A4Preferences.HyperSMVAps;
+import static edu.mit.csail.sdg.alloy4.A4Preferences.AutoHyperSolver;
+import static edu.mit.csail.sdg.alloy4.A4Preferences.HyperQubeK;
+import static edu.mit.csail.sdg.alloy4.A4Preferences.HyperQubeSem;
 import static edu.mit.csail.sdg.alloy4.A4Preferences.SubMemory;
 import static edu.mit.csail.sdg.alloy4.A4Preferences.SubStack;
 import static edu.mit.csail.sdg.alloy4.A4Preferences.SyntaxDisabled;
@@ -86,11 +91,6 @@ public class PreferencesDialog extends JFrame {
 
     private static final long serialVersionUID = 5577892964740788892L;
     private JTabbedPane       tab;
-    // private JPanel editorPane;
-    // private JPanel solverPane;
-    // private JPanel miscPane;
-
-    final static boolean isDebug = "yes".equals(System.getProperty("debug"));
 
     private static class MyIntSpinnerModel extends AbstractSpinnerModel {
 
@@ -305,8 +305,8 @@ public class PreferencesDialog extends JFrame {
     }
 
     protected Component initSolverPane() {
-        JPanel p = OurUtil.makeGrid(2, gbc().make(), mkCombo(Solver), mkSlider(SkolemDepth), mkCombo(Unrolls), mkCombo(CoreGranularity), mkSlider(CoreMinimization), mkSlider(DecomposePref));
-        int r = 6;
+        JPanel p = OurUtil.makeGrid(2, gbc().make(), mkCombo(Solver), mkCombo(HyperSMVMaxDDSize), mkCombo(HyperSMVAps), mkCombo(AutoHyperSolver), mkCombo(HyperQubeK), mkCombo(HyperQubeSem), mkSlider(SkolemDepth), mkCombo(Unrolls), mkCombo(CoreGranularity), mkSlider(CoreMinimization), mkSlider(DecomposePref));
+        int r = 11;
         addToGrid(p, mkCheckBox(NoOverflow), gbc().pos(0, r++).gridwidth(2));
         addToGrid(p, mkCheckBox(ImplicitThis), gbc().pos(0, r++).gridwidth(2));
         addToGrid(p, mkCheckBox(InferPartialInstance), gbc().pos(0, r++).gridwidth(2));

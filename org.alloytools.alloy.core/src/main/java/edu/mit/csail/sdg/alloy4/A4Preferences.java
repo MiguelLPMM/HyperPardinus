@@ -617,6 +617,21 @@ public class A4Preferences {
             InstFormat.values(), InstFormat.VIZ);
     public static final ChoicePref<InstFormat> HOLSaveCex = new ChoicePref<InstFormat>("HOLSaveCex", "Save CEGIS counterexamples as",
             InstFormat.values(), InstFormat.VIZ);
+    
+    /** HyperSMV max DD block size. */
+    public static final IntChoicePref         HyperSMVMaxDDSize      = new IntChoicePref("HyperSMVMaxDDSize", "Max DD Block Size", Arrays.asList(0, 2048), 2048);
+
+    /** HyperSMV atomic proposition encoding. */
+    public static final StringChoicePref      HyperSMVAps            = new StringChoicePref("HyperSMVAps", "Atomic Propositions", Arrays.asList("dtproduct", "ddsmall", "ddlarge"), "ddlarge");
+
+    /** AutoHyper backend solver. */
+    public static final StringChoicePref      AutoHyperSolver        = new StringChoicePref("AutoHyperSolver", "AutoHyper Solver", Arrays.asList("spot", "rabit", "bait", "forklift", "forq", "roll"), "spot");
+    
+    /** HyperQube unrolling bound. */
+    public static final IntChoicePref         HyperQubeK             = new IntChoicePref("HyperQubeK", "HyperQube unrolling Bound", Arrays.asList(3, 6, 20), 20);
+
+    /** HyperQube semantics. */
+    public static final StringChoicePref      HyperQubeSem           = new StringChoicePref("HyperQubeSem", "HyperQube Semantics", Arrays.asList("pes", "opt", "hpes", "hopt"), "pes");
 
     public enum InstFormat {
         VIZ("Viz"), TEXT("Text"), NOTHING("Nothing");
