@@ -527,13 +527,9 @@ public final class StaticInstanceReader {
     }
 
     /** Parse the file into an AlloyInstance if possible. */
-    public static List<AlloyInstance> parseInstance(File file, int state) throws Err {
+    public static AlloyInstance parseInstance(File file, int state) throws Err {
         try {
-            AlloyInstance x = (new StaticInstanceReader(new XMLNode(file), state)).ans;
-            List<AlloyInstance> res = new ArrayList<AlloyInstance>();
-            res.add(x);
-            res.add(x);
-            return res;
+            return (new StaticInstanceReader(new XMLNode(file), state)).ans;
         } catch (IOException ex) {
             throw new ErrorFatal("Error reading the XML file: " + ex, ex);
         }

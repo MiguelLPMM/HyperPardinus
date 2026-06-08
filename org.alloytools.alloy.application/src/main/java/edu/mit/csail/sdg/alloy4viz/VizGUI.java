@@ -64,6 +64,7 @@ import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -205,9 +206,9 @@ public final class VizGUI implements ComponentListener {
     private boolean             seg_iteration   = false;
 
     /**
-     * The current states and visualization settings; null if none is loaded.
+     * The current traces and visualization settings; null if none is loaded.
      */
-    private List<List<VizState>> myStates        = new ArrayList<List<VizState>>();
+    private List<VizTrace>      myTraces        = new ArrayList<VizTrace>();
 
     /**
      * Returns the current visualization settings (and you can call
@@ -215,9 +216,24 @@ public final class VizGUI implements ComponentListener {
      * make changes to the state, you should call doApply() on the VizGUI object to
      * refresh the screen.
      */
-    public List<List<VizState>> getVizState() {
-        return myStates;
+    public List<VizState> getVizState() {
+        return myTraces.get(0).getStates();
     }
+
+    /**
+     * The length of the longest trace
+     */
+    private int                   maxTraceLength     = 0;
+
+    /**
+     * The length of the longest loop across all traces
+     */
+    private int                   maxLoopLength      = 1;
+
+    /**
+     * The length of the largest trace that contains the longest loop
+     */
+    private int                   maxLoopTraceLength = 1;
 
     /**
      * The customization panel to the left; null if it is not yet loaded.
@@ -234,6 +250,12 @@ public final class VizGUI implements ComponentListener {
      * not yet loaded.
      */
     private VizGraphPanel         myGraphPanel     = null;
+
+    /**
+     * The panel to the right, containing the graph and the temporal navigation
+     * panel; null if it is not yet loaded.
+     */
+    private JPanel                mySplitTemporal  = null;
 
     /**
      * The splitpane between the customization panel and the graph panel.
@@ -812,13 +834,13 @@ public final class VizGUI implements ComponentListener {
     private void repopulateProjectionPopup() {
         int num = 0;
         String label = "Projection: none";
-        if (myStates.isEmpty()) {
+        if (myTraces.isEmpty() || myTraces.get(0).getStates().isEmpty()) {
             projectionButton.setEnabled(false);
             return;
         }
         projectionButton.setEnabled(true);
         projectionPopup.removeAll();
-        VizState myState = myStates.get(0).get(0);
+        VizState myState = myTraces.get(0).getStates().get(0);
         final Set<AlloyType> projected = myState.getProjectedTypes();
         for (final AlloyType t : myState.getOriginalModel().getTypes())
             if (myState.canProject(t)) {
@@ -828,13 +850,13 @@ public final class VizGUI implements ComponentListener {
 
                     @Override
                     public void actionPerformed(ActionEvent e) {
-                        // [electrum] apply projection to all states
-                        for (List<VizState> myStates : myStates)
-                            for (VizState myState : myStates)
+                        for (VizTrace trace : myTraces)
+                            // [electrum] apply projection to all states
+                            for (VizState myState : trace.getStates())
                                 if (on)
-                                myState.deproject(t);
-                            else
-                                myState.project(t);
+                                    myState.deproject(t);
+                                else
+                                    myState.project(t);
                         updateDisplay();
                     }
                 });
@@ -853,8 +875,9 @@ public final class VizGUI implements ComponentListener {
      * latest settings.
      */
     private void updateDisplay() {
-        if (myStates.isEmpty())
+        if (myTraces.isEmpty() || myTraces.get(0).getStates().isEmpty())
             return;
+
         // First, update the toolbar
         currentMode.set();
         for (JButton button : solutionButtons)
@@ -875,7 +898,7 @@ public final class VizGUI implements ComponentListener {
                 vizButton.setEnabled(false);
         }
         // [electrum] this info is the same in all states
-        final AlloyInstance oInst = myStates.get(0).get(0).getOriginalInstance();
+        final AlloyInstance oInst = myTraces.get(0).getStates().get(0).getOriginalInstance();
         final boolean isMeta = oInst.isMetamodel;
         final boolean isTrace = oInst.originalA4.getMaxTrace() >= 0;
         final boolean hasConfigs = oInst.originalA4.hasConfigs();
@@ -930,31 +953,33 @@ public final class VizGUI implements ComponentListener {
             frame.setTitle(makeVizTitle());
         int numPanes = isTrace && !isMeta ? statepanes : 1;
 
-
         if (current != lastParsed) {
-            for (int i = 0; i < getVizState().size(); i++) {
-                File f = new File(getXMLfilename());
-                try {
-                    if (!f.exists())
-                        throw new IOException("File " + getXMLfilename() + " does not exist.");
+            for (VizTrace trace : myTraces) {
+                List<VizState> states = trace.getStates();
+                for (int i = 0; i < states.size(); i++) {
+                    String filename = trace.getName();
+                    File f = new File(Util.canon(trace.getXmlPath()));
+                    try {
+                        if (!f.exists())
+                            throw new IOException("File " + filename + " does not exist.");
 
-                    if (current + i < 0) {
-                        getVizState().set(i, null);
-                    } else {
-                        List<AlloyInstance> myInstances = StaticInstanceReader.parseInstance(f, current + i);
-                        for (int j = 0; j < myInstances.size(); j++) {
-                            if (getVizState().get(j).get(i) != null)
-                                getVizState().get(j).get(i).loadInstance(myInstances.get(j));
+                        int effectiveIdx = computeEffectiveIndex(trace);
+                        if (effectiveIdx + i < 0) {
+                            states.set(i, null);
+                        } else {
+                            AlloyInstance myInstance = StaticInstanceReader.parseInstance(f, effectiveIdx + i);
+                            if (states.get(i) != null)
+                                states.get(i).loadInstance(myInstance);
                             else {
-                                getVizState().get(j).set(i, new VizState(getVizState().get(j).get(getVizState().size() - 1)));
-                                getVizState().get(j).get(i).loadInstance(myInstances.get(j));
+                                states.set(i, new VizState(states.get(states.size() - 1)));
+                                states.get(i).loadInstance(myInstance);
                             }
                         }
+                    } catch (Throwable e) {
+                        OurDialog.alert(frame, "Cannot read or parse Alloy instance: " + xmlFileName + "\n\nError: " + e.getMessage());
+                        doCloseAll();
+                        return;
                     }
-                } catch (Throwable e) {
-                    OurDialog.alert(frame, "Cannot read or parse Alloy instance: " + xmlFileName + "\n\nError: " + e.getMessage());
-                    doCloseAll();
-                    return;
                 }
             }
             lastParsed = current;
@@ -962,56 +987,121 @@ public final class VizGUI implements ComponentListener {
 
         switch (currentMode) {
             case Tree : {
-                final VizTree t = new VizTree(myStates.get(0).get(0).getOriginalInstance().originalA4, makeVizTitle(), fontSize, current);
-                final JScrollPane scroll = OurUtil.scrollpane(t, Color.BLACK, Color.WHITE, new OurBorder(true, false, true, false));
-                scroll.addFocusListener(new FocusListener() {
+                Box verticalTreeLayout = Box.createVerticalBox();
 
-                    @Override
-                    public final void focusGained(FocusEvent e) {
-                        t.requestFocusInWindow();
-                    }
+                for (VizTrace trace : myTraces) {
+                    int effectiveIdx = computeEffectiveIndex(trace);
+                    final VizTree t = new VizTree(trace.getStates().get(0).getOriginalInstance().originalA4, makeVizTitle(), fontSize, effectiveIdx);
+                    final JScrollPane scroll = OurUtil.scrollpane(t, Color.BLACK, Color.WHITE, new OurBorder(true, false, true, false));
 
-                    @Override
-                    public final void focusLost(FocusEvent e) {
-                    }
-                });
-                content = scroll;
+                    scroll.addFocusListener(new FocusListener() {
+
+                        @Override
+                        public void focusGained(FocusEvent e) {
+                            t.requestFocusInWindow();
+                        }
+
+                        @Override
+                        public void focusLost(FocusEvent e) {
+                        }
+                    });
+
+                    JPanel topBox = new JPanel();
+                    topBox.setLayout(new BoxLayout(topBox, BoxLayout.PAGE_AXIS));
+                    JLabel traceLabel = new JLabel("Trace " + trace.getName());
+                    traceLabel.setFont(traceLabel.getFont().deriveFont(Font.BOLD));
+                    topBox.add(traceLabel);
+                    topBox.add(traceGraph(trace));
+
+                    JPanel traceBlock = new JPanel(new BorderLayout());
+                    traceBlock.add(topBox, BorderLayout.NORTH);
+                    traceBlock.add(scroll, BorderLayout.CENTER);
+
+                    verticalTreeLayout.add(traceBlock);
+                }
+
+                content = verticalTreeLayout;
                 break;
             }
             case TEXT : {
-                List<String> textualOutput = IntStream.range(current, current + numPanes).mapToObj(x -> myStates.get(0).get(0).getOriginalInstance().originalA4.toString(x)).collect(Collectors.toList());
-                content = getTextComponent(textualOutput, true);
+                Box verticalTextLayout = Box.createVerticalBox();
+
+                for (VizTrace trace : myTraces) {
+                    int effectiveIdx = computeEffectiveIndex(trace);
+                    List<String> textualOutput = IntStream.range(effectiveIdx, effectiveIdx + numPanes).mapToObj(x -> trace.getStates().get(0).getOriginalInstance().originalA4.toString(x)).collect(Collectors.toList());
+
+                    JPanel topBox = new JPanel();
+                    topBox.setLayout(new BoxLayout(topBox, BoxLayout.PAGE_AXIS));
+                    JLabel traceLabel = new JLabel("Trace " + trace.getName());
+                    traceLabel.setFont(traceLabel.getFont().deriveFont(Font.BOLD));
+                    topBox.add(traceLabel);
+                    topBox.add(traceGraph(trace));
+
+                    JPanel traceBlock = new JPanel(new BorderLayout());
+                    traceBlock.add(topBox, BorderLayout.NORTH);
+                    traceBlock.add(getTextComponent(textualOutput, true), BorderLayout.CENTER);
+
+                    verticalTextLayout.add(traceBlock);
+                }
+
+                content = verticalTextLayout;
                 break;
             }
             case TABLE : {
-                List<String> textualOutput = IntStream.range(current, current + numPanes).mapToObj(x -> myStates.get(0).get(0).getOriginalInstance().originalA4.format(x)).collect(Collectors.toList());
-                content = getTextComponent(textualOutput, false);
+                Box verticalTableLayout = Box.createVerticalBox();
+
+                for (VizTrace trace : myTraces) {
+                    int effectiveIdx = computeEffectiveIndex(trace);
+                    List<String> textualOutput = IntStream.range(effectiveIdx, effectiveIdx + numPanes).mapToObj(x -> trace.getStates().get(0).getOriginalInstance().originalA4.format(x)).collect(Collectors.toList());
+
+                    JPanel topBox = new JPanel();
+                    topBox.setLayout(new BoxLayout(topBox, BoxLayout.PAGE_AXIS));
+                    JLabel traceLabel = new JLabel("Trace " + trace.getName());
+                    traceLabel.setFont(traceLabel.getFont().deriveFont(Font.BOLD));
+                    topBox.add(traceLabel);
+                    topBox.add(traceGraph(trace));
+
+                    JPanel traceBlock = new JPanel(new BorderLayout());
+                    traceBlock.add(topBox, BorderLayout.NORTH);
+                    traceBlock.add(getTextComponent(textualOutput, false), BorderLayout.CENTER);
+
+                    verticalTableLayout.add(traceBlock);
+                }
+
+                content = verticalTableLayout;
                 break;
             }
             default : {
-                if (myGraphPanel == null || numPanes != myGraphPanel.numPanels())
-                    myGraphPanel = new VizGraphPanel(frame, myStates, false);
+                Box verticalLayout = Box.createVerticalBox();
 
-                myGraphPanel.seeDot(frame, false);
-                myGraphPanel.remakeAll(frame);
+                for (VizTrace trace : myTraces) {
+                    JPanel traceBlock = new JPanel(new BorderLayout());
 
-                content = myGraphPanel;
+                    JPanel topBox = new JPanel();
+                    topBox.setLayout(new BoxLayout(topBox, BoxLayout.PAGE_AXIS));
+                    JLabel traceLabel = new JLabel("Trace " + trace.getName());
+                    traceLabel.setFont(traceLabel.getFont().deriveFont(Font.BOLD));
+                    topBox.add(traceLabel);
+                    topBox.add(traceGraph(trace));
+                    traceBlock.add(topBox, BorderLayout.NORTH);
+
+                    JPanel row = new JPanel();
+                    row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
+
+                    for (int i = 0; i < statepanes; i++) {
+                        VizState vs = trace.getState(i);
+                        VizGraphPanel panel = new VizGraphPanel(frame, List.of(vs), false);
+                        panel.seeDot(frame, false);
+                        panel.remakeAll(frame);
+                        row.add(panel);
+                    }
+
+                    traceBlock.add(row, BorderLayout.CENTER);
+                    verticalLayout.add(traceBlock);
+                }
+
+                content = verticalLayout;
             }
-        }
-
-        // update the trace overview
-        if (isTrace && !isMeta) {
-            JComponent aux = content;
-
-            content = new JPanel(new BorderLayout());
-            JPanel tmpNavScrollPanel = new JPanel();
-            tmpNavScrollPanel.setLayout(new BoxLayout(tmpNavScrollPanel, BoxLayout.PAGE_AXIS));
-            tmpNavScrollPanel.add(traceGraph());
-            final Box instanceTopBox = Box.createVerticalBox();
-            instanceTopBox.add(tmpNavScrollPanel);
-            content.add(instanceTopBox, BorderLayout.NORTH);
-            content.add(aux, BorderLayout.CENTER);
-            content.setVisible(true);
         }
 
         // Now that we've re-constructed "content", let's set its font size
@@ -1035,7 +1125,7 @@ public final class VizGUI implements ComponentListener {
         JComponent left = null;
         if (settingsOpen == 1) {
             if (myCustomPanel == null)
-                myCustomPanel = new VizCustomizationPanel(splitpane, myStates.get(0).get(0));
+                myCustomPanel = new VizCustomizationPanel(splitpane, myTraces.get(0).getStates().get(0));
             else
                 myCustomPanel.remakeAll();
             left = myCustomPanel;
@@ -1043,9 +1133,10 @@ public final class VizGUI implements ComponentListener {
             if (myEvaluatorPanel == null)
                 myEvaluatorPanel = new OurConsole(evaluator, true, "The ", true, "Alloy Evaluator ", false, "allows you to type in Alloy expressions and see their values.\nFor example, ", true, "univ", false, " shows the list of all atoms.\nIf inspecting a trace, evaluation is performed on the currently focused state (left-hand side).\n(You can press UP and DOWN to recall old inputs).\n");
             try {
+                // TODO: Evaluate all traces at once or else an evaluator per trace
                 evaluator.compute(new File(xmlFileName));
                 // [electrum] evaluator acts on current state
-                myEvaluatorPanel.setCurrentState(current);
+                myEvaluatorPanel.setCurrentState(computeEffectiveIndex(myTraces.get(0)));
             } catch (Exception ex) {
             } // exception should not happen
             left = myEvaluatorPanel;
@@ -1095,8 +1186,8 @@ public final class VizGUI implements ComponentListener {
      */
     private String makeVizTitle() {
         // [electrum] this info is the same in all states
-        String filename = (!myStates.isEmpty() ? myStates.get(0).get(0).getOriginalInstance().filename : "");
-        String commandname = (!myStates.isEmpty() ? myStates.get(0).get(0).getOriginalInstance().commandname : "");
+        String filename = (!myTraces.isEmpty() && !myTraces.get(0).getStates().isEmpty() ? myTraces.get(0).getStates().get(0).getOriginalInstance().filename : "");
+        String commandname = (!myTraces.isEmpty() && !myTraces.get(0).getStates().isEmpty() ? myTraces.get(0).getStates().get(0).getOriginalInstance().commandname : "");
         int i = filename.lastIndexOf('/');
         if (i >= 0)
             filename = filename.substring(i + 1);
@@ -1142,7 +1233,7 @@ public final class VizGUI implements ComponentListener {
         diagramsScrollPanels.setLayout(new BoxLayout(diagramsScrollPanels, BoxLayout.LINE_AXIS));
         for (int i = 0; i < texts.size(); i++) {
 
-            final JTextArea ta = OurUtil.textarea(texts.get(i), 10, 10, false, false);
+            final JTextArea ta = OurUtil.textarea(texts.get(i), 10, 10, false, wrap);
 
             try {
                 List<Entry<Integer,Integer>> dfs = new ArrayList<>();
@@ -1229,39 +1320,38 @@ public final class VizGUI implements ComponentListener {
         current = state;
         final String xmlFileName = Util.canon(fileName);
         File f = new File(xmlFileName);
+        File folder = f.getParentFile();
+        File[] xmlFiles = folder.listFiles((dir, name) -> name.endsWith(".cnf.xml"));
         if (!forcefully)
             seg_iteration = false;
         if (forcefully || !xmlFileName.equals(this.xmlFileName)) {
             try {
                 if (!f.exists())
                     throw new IOException("File " + xmlFileName + " does not exist.");
-
-                if (getVizState().isEmpty())
+                myTraces.clear();
+                for (File xmlFile : xmlFiles) {
+                    String traceName = xmlFile.getName().replaceFirst("\\.cnf\\.xml$", "");
+                    String traceFilePath = Util.canon(xmlFile.getPath());
+                    List<VizState> states = new ArrayList<VizState>();
                     for (int i = 0; i < statepanes; i++) {
-                        List<AlloyInstance> myInstances = StaticInstanceReader.parseInstance(f, state + i);
-                        for (int j = 0; j < myInstances.size(); j++) {
-                            if (j >= myStates.size())
-                                myStates.add(new ArrayList<VizState>());
-                            myStates.get(j).add(new VizState(myInstances.get(j)));
+                        AlloyInstance myInstance = StaticInstanceReader.parseInstance(xmlFile, state + i);
+                        states.add(new VizState(myInstance));
+                        boolean isMeta = myInstance.isMetamodel;
+                        boolean isTrace = myInstance.originalA4.getMaxTrace() >= 0;
+                        if (!isTrace || isMeta) {
+                            break;
                         }
                     }
-                else {
-                    for (int j = 0; j < getVizState().size(); j++) {
-                        for (int i = 0; i < statepanes; i++) {
-                            VizState vstate = myStates.get(j).get(i);
-                            AlloyInstance myInstance = StaticInstanceReader.parseInstance(f, state + i).get(j);
-                            if (vstate == null)
-                                vstate = new VizState(myInstance);
-                            else
-                                vstate.loadInstance(myInstance);
-                            myStates.get(j).set(i, vstate);
+                    int traceLength = states.get(0).getOriginalInstance().tracelen;
+                    int loopLength = states.get(0).getOriginalInstance().looplen;
+                    myTraces.add(new VizTrace(traceName, states, traceFilePath, traceLength, loopLength));
+                    maxTraceLength = Math.max(maxTraceLength, traceLength);
+                    if (loopLength >= maxLoopLength) {
+                        maxLoopLength = loopLength;
+                        if (traceLength > maxLoopTraceLength) {
+                            maxLoopTraceLength = traceLength;
                         }
                     }
-                }
-                boolean isMeta = myStates.get(0).get(0).getOriginalInstance().isMetamodel;
-                boolean isTrace = myStates.get(0).get(0).getOriginalInstance().originalA4.getMaxTrace() >= 0;
-                if (!isTrace || isMeta) {
-                    myStates.retainAll(Arrays.asList(myStates.get(0)));
                 }
             } catch (Throwable e) {
                 xmlLoaded.remove(fileName);
@@ -1297,12 +1387,12 @@ public final class VizGUI implements ComponentListener {
 
     /** This method loads a specific theme file. */
     public boolean loadThemeFile(String filename) {
-        if (myStates.isEmpty())
+        if (myTraces.isEmpty() || myTraces.get(0).getStates().isEmpty())
             return false; // Can only load if there is a VizState loaded
         filename = Util.canon(filename);
         try {
-            for (List<VizState> myStates : myStates)
-                for (VizState myState : myStates) // [electrum] applly theme to all states
+            for (VizTrace trace : myTraces)
+                for (VizState myState : trace.getStates()) // [electrum] applly theme to all states
                     myState.loadPaletteXML(filename);
         } catch (IOException ex) {
             OurDialog.alert(frame, "Error: " + ex.getMessage());
@@ -1324,7 +1414,7 @@ public final class VizGUI implements ComponentListener {
      * user); returns true if it succeeded.
      */
     public boolean saveThemeFile(String filename) {
-        if (myStates.isEmpty())
+        if (myTraces.isEmpty() || myTraces.get(0).getStates().isEmpty())
             return false; // Can only save if there is a VizState loaded
         if (filename == null) {
             File file = OurDialog.askFile(frame, false, null, ".thm", ".thm theme files");
@@ -1338,7 +1428,7 @@ public final class VizGUI implements ComponentListener {
         }
         filename = Util.canon(filename);
         try {
-            myStates.get(0).get(0).savePaletteXML(filename); // [electrum] same theme in all states
+            myTraces.get(0).getStates().get(0).savePaletteXML(filename); // [electrum] same theme in all states
             filename = Util.canon(filename); // Since the canon name may have
                                             // changed
             addThemeHistory(filename);
@@ -1453,11 +1543,11 @@ public final class VizGUI implements ComponentListener {
         String defaultTheme = System.getProperty("alloy.theme0");
         if (defaultTheme == null)
             defaultTheme = "";
-        if (myStates.isEmpty())
+        if (myTraces.isEmpty() || myTraces.get(0).getStates().isEmpty())
             return null; // Can only load if there is a VizState loaded
         // [electrum] apply theme to all states
-        for (List<VizState> myStates : myStates)
-            for (VizState myState : myStates) {
+        for (VizTrace trace : myTraces) {
+            for (VizState myState : trace.getStates()) {
                 if (myState.changedSinceLastSave()) {
                     char opt = OurDialog.askSaveDiscardCancel(frame, "The current theme");
                     if (opt == 'c')
@@ -1466,6 +1556,7 @@ public final class VizGUI implements ComponentListener {
                         return null;
                 }
             }
+        }
         File file = OurDialog.askFile(frame, true, null, ".thm", ".thm theme files");
         if (file != null) {
             Util.setCurrentDirectory(file.getParentFile());
@@ -1484,11 +1575,11 @@ public final class VizGUI implements ComponentListener {
         String defaultTheme = System.getProperty("alloy.theme0");
         if (defaultTheme == null)
             defaultTheme = "";
-        if (myStates.isEmpty())
+        if (myTraces.isEmpty() || myTraces.get(0).getStates().isEmpty())
             return null; // Can only load if there is a VizState loaded
         // [electrum] apply theme to all states
-        for (List<VizState> myStates : myStates)
-            for (VizState myState : myStates) {
+        for (VizTrace trace : myTraces) {
+            for (VizState myState : trace.getStates()) {
                 if (myState.changedSinceLastSave()) {
                     char opt = OurDialog.askSaveDiscardCancel(frame, "The current theme");
                     if (opt == 'c')
@@ -1497,6 +1588,7 @@ public final class VizGUI implements ComponentListener {
                         return null;
                 }
             }
+        }
         File file = OurDialog.askFile(frame, true, defaultTheme, ".thm", ".thm theme files");
         if (file != null)
             loadThemeFile(file.getPath());
@@ -1596,11 +1688,12 @@ public final class VizGUI implements ComponentListener {
     private Runner doExportPred() {
         if (wrap)
             return wrapMe();
-        if (myStates.isEmpty())
+        if (myTraces.isEmpty() || myTraces.get(0).getStates().isEmpty())
             return null;
 
         Map<String,ExprVar> reifs = new HashMap<String,ExprVar>();
-        A4Solution inst = myStates.get(0).get(myStates.size() - 1).getOriginalInstance().originalA4;
+        // TODO: export all traces
+        A4Solution inst = myTraces.get(0).getStates().get(myTraces.get(0).getStates().size() - 1).getOriginalInstance().originalA4;
 
         // calculate the values of the static relations
         StringJoiner config = new StringJoiner("\n  ");
@@ -1691,12 +1784,12 @@ public final class VizGUI implements ComponentListener {
     private Runner doResetTheme() {
         if (wrap)
             return wrapMe();
-        if (myStates.isEmpty())
+        if (myTraces.isEmpty() || myTraces.get(0).getStates().isEmpty())
             return null;
         if (!OurDialog.yesno(frame, "Are you sure you wish to clear all your customizations?", "Yes, clear them", "No, keep them"))
             return null;
-        for (List<VizState> myStates : myStates)
-            for (VizState myState : myStates)
+        for (VizTrace trace : myTraces)
+            for (VizState myState : trace.getStates())
                 myState.resetTheme();
         repopulateProjectionPopup();
         if (myCustomPanel != null)
@@ -1714,12 +1807,12 @@ public final class VizGUI implements ComponentListener {
     private Runner doMagicLayout() {
         if (wrap)
             return wrapMe();
-        if (myStates.isEmpty())
+        if (myTraces.isEmpty() || myTraces.get(0).getStates().isEmpty())
             return null;
         if (!OurDialog.yesno(frame, "This will clear your original customizations. Are you sure?", "Yes, clear them", "No, keep them"))
             return null;
-        for (List<VizState> myStates : myStates)
-            for (VizState myState : myStates) {
+        for (VizTrace trace : myTraces) {
+            for (VizState myState : trace.getStates()) {
                 myState.resetTheme();
                 try {
                     MagicLayout.magic(myState);
@@ -1727,6 +1820,7 @@ public final class VizGUI implements ComponentListener {
                 } catch (Throwable ex) {
                 }
             }
+        }
         repopulateProjectionPopup();
         if (myCustomPanel != null)
             myCustomPanel.remakeAll();
@@ -1805,8 +1899,8 @@ public final class VizGUI implements ComponentListener {
     private Runner doNavRight() {
         if (wrap)
             return wrapMe();
-        int lst = getVizState().get(0).get(0).getOriginalInstance().originalA4.getTraceLength();
-        int lop = getVizState().get(0).get(0).getOriginalInstance().originalA4.getLoopState();
+        int lst = getVizState().get(0).getOriginalInstance().originalA4.getTraceLength();
+        int lop = getVizState().get(0).getOriginalInstance().originalA4.getLoopState();
         int lmx = current + 1 + getVizState().size() > lst ? current + 1 + getVizState().size() : lst;
         int lox = lmx - (lst - lop);
         current = normalize(current + 1, lmx, lox);
@@ -1907,7 +2001,7 @@ public final class VizGUI implements ComponentListener {
             try {
                 seg_iteration = true;
                 enumerator.compute(new String[] {
-                                                 xmlFileName, current + 1 + ""
+                                                 xmlFileName, computeEffectiveIndex(myTraces.get(0)) + 1 + ""
                 });
             } catch (Throwable ex) {
                 OurDialog.alert(frame, ex.getMessage());
@@ -1946,14 +2040,17 @@ public final class VizGUI implements ComponentListener {
      * This method updates the graph with the current theme customization.
      */
     private Runner doApply() {
-        if (!myStates.isEmpty()) {
-            // [electrum] apply theme to all states
-            for (List<VizState> myStates : myStates)
-                for (int i = 1; i < myStates.size(); i++) {
-                    VizState old = myStates.get(1);
-                    myStates.set(i, new VizState(myStates.get(0)));
-                    myStates.get(i).loadInstance(old.getOriginalInstance());
+        if (!myTraces.isEmpty() && !myTraces.get(0).getStates().isEmpty()) {
+            VizState base = myTraces.get(0).getStates().get(0);
+            for (VizTrace trace : myTraces) {
+                List<VizState> states = trace.getStates();
+                // [electrum] apply theme to all states
+                for (int i = 1; i < states.size(); i++) {
+                    VizState old = states.get(i);
+                    states.set(i, new VizState(base));
+                    states.get(i).loadInstance(old.getOriginalInstance());
                 }
+            }
         }
         if (!wrap)
             updateDisplay();
@@ -2079,13 +2176,15 @@ public final class VizGUI implements ComponentListener {
      * Draws a graph depicting the shape of the trace being visualized. States are
      * clickable for navigation.
      */
-    private JPanel traceGraph() {
+    private JPanel traceGraph(VizTrace vizTrace) {
 
         List<Ellipse2D> states = new ArrayList<Ellipse2D>();
 
         JPanel trace = new JPanel() {
 
             int heighti = 50;
+
+            int effectiveIdx = computeEffectiveIndex(vizTrace);
 
             @Override
             public void paintComponent(Graphics g) {
@@ -2094,15 +2193,16 @@ public final class VizGUI implements ComponentListener {
                 Graphics2D g2 = (Graphics2D) g;
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
+                int traceSize = vizTrace.getStates().size();
                 int radius = 12;
                 int dist = 45;
                 int offsety = 2 + heighti / 2;
                 // center and apply offset according to current state
-                int offsetx = this.getWidth() / 2 + ((dist - 2 * radius) / 2) - (dist * (current + 1));
-                int lst = getVizState().get(0).get(getVizState().size() - 1).getOriginalInstance().tracelen;
-                int lol = getVizState().get(0).get(getVizState().size() - 1).getOriginalInstance().looplen;
+                int offsetx = this.getWidth() / 2 + ((dist - 2 * radius) / 2) - (dist * (effectiveIdx + 1));
+                int lst = vizTrace.getStates().get(traceSize - 1).getOriginalInstance().tracelen;
+                int lol = vizTrace.getStates().get(traceSize - 1).getOriginalInstance().looplen;
                 int lop = (lst - lol);
-                int lmx = current + getVizState().size() > lst ? current + getVizState().size() : lst;
+                int lmx = effectiveIdx + traceSize > lst ? effectiveIdx + traceSize : lst;
                 int lox = lmx - (lst - lop);
                 Ellipse2D loop = null, last = null;
                 for (int i = 0; i < lmx; i++) {
@@ -2113,8 +2213,8 @@ public final class VizGUI implements ComponentListener {
                     if (i == lox)
                         loop = circl;
                     Color tmp = g2.getColor();
-                    int max = normalize(current + getVizState().size() - 1, lmx, lox);
-                    int min = normalize(current, lmx, lox);
+                    int max = normalize(effectiveIdx + traceSize - 1, lmx, lox);
+                    int min = normalize(effectiveIdx, lmx, lox);
                     if ((min <= max && i >= min && i <= max) || (min > max && (i >= min || (i <= max && i >= lox)))) {
                         g2.setColor(new Color(255, 255, 255));
                     } else {
@@ -2174,8 +2274,11 @@ public final class VizGUI implements ComponentListener {
             public void mouseClicked(MouseEvent e) {
                 for (int i = 0; i < states.size(); i++)
                     if (e.getButton() == 1 && states.get(i).contains(e.getX(), e.getY())) {
-                        current = i;
-                        updateDisplay();
+                        int newCurrent = findCurrentForEffectiveIndex(vizTrace, i);
+                        if (newCurrent >= 0) {
+                            current = newCurrent;
+                            updateDisplay();
+                        }
                         break;
                     }
             }
@@ -2196,6 +2299,51 @@ public final class VizGUI implements ComponentListener {
     private int normalize(int idx, int length, int loop) {
         int lln = length - loop;
         return idx > loop ? (((idx - loop) % lln) + loop) : idx;
+    }
+
+    /**
+     * Computes the effective current index of the current state in the given trace.
+     *
+     * @param trace the trace being visualized
+     * @return the effective current index for that trace
+     */
+    private int computeEffectiveIndex(VizTrace trace) {
+        int traceLength = trace.getStates().get(0).getOriginalInstance().tracelen;
+        int loopLength = trace.getStates().get(0).getOriginalInstance().looplen;
+
+        // Difference between the trace length and the biggest trace length
+        int differenceToBiggestTrace = Math.max(Math.min(maxTraceLength, current) - traceLength, 0);
+
+        // Number of loops completed without counting the first
+        int completedLoops = Math.max((current - maxTraceLength) / maxLoopLength, 0);
+        // Multiplied by the difference in length between the loop and the biggest loop
+        int differenceInCompletedLoops = completedLoops * (maxLoopLength - loopLength);
+
+        // How much of the current loop was wait
+        int currentLoopWait = Math.max(current - maxTraceLength - completedLoops * maxLoopLength - loopLength, 0);
+
+        int effectiveIdx = current - differenceToBiggestTrace - differenceInCompletedLoops - currentLoopWait;
+        return effectiveIdx;
+    }
+
+    /**
+     * Given an effective index, computes the current value Since the computation of
+     * the effective index uses floorDiv, we need to iterate over the possible
+     * values
+     *
+     * @param trace the trace being visualized
+     * @param targetIndex the effective index to be converted
+     * @return the current index in the trace
+     */
+    private int findCurrentForEffectiveIndex(VizTrace trace, int targetIndex) {
+        for (int candidate = 0; candidate < 1000; candidate++) { // put a safe upper limit
+            int effective = computeEffectiveIndex(trace);
+
+            if (effective == targetIndex)
+                return candidate;
+        }
+
+        return -1; // not found
     }
 
 }

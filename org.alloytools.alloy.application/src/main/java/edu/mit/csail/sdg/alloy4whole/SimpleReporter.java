@@ -23,8 +23,6 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,8 +31,6 @@ import java.util.Set;
 
 import org.alloytools.alloy.core.AlloyCore;
 
-import edu.mit.csail.sdg.alloy4.A4Preferences;
-import edu.mit.csail.sdg.alloy4.A4Preferences.InstFormat;
 import edu.mit.csail.sdg.alloy4.A4Reporter;
 import edu.mit.csail.sdg.alloy4.ConstList;
 import edu.mit.csail.sdg.alloy4.ConstMap;
@@ -64,14 +60,6 @@ import edu.mit.csail.sdg.translator.A4Solution;
 import edu.mit.csail.sdg.translator.A4SolutionReader;
 import edu.mit.csail.sdg.translator.A4SolutionWriter;
 import edu.mit.csail.sdg.translator.TranslateAlloyToKodkod;
-import kodkod.ast.Formula;
-import kodkod.engine.hol.HOLTranslation;
-import kodkod.engine.hol.HOLTranslationNew;
-import kodkod.engine.hol.HOLTranslationTemp;
-import kodkod.instance.Bounds;
-import kodkod.instance.Instance;
-import kodkod.instance.TemporalInstance;
-import kodkod.util.nodes.PrettyPrinter;
 
 /**
  * This helper method is used by SimpleGUI.
@@ -100,12 +88,9 @@ public final class SimpleReporter extends A4Reporter {
         private final SwingLogPanel     span;
         private final Set<ErrorWarning> warnings = new HashSet<ErrorWarning>();
         private final List<String>      results  = new ArrayList<String>();
-        private final Map<String,Pair<Integer,String>> holTrPos  = new HashMap<String,Pair<Integer,String>>();
-        private final Map<String,Integer>              seenFolTr = new HashMap<String,Integer>();
-        private int                                    len2      = 0, len3 = 0, len4 = 0, verbosity = 0;
+        private int                     len2     = 0, len3 = 0, len4 = 0, verbosity = 0;
         private final String            latestName;
         private final int               latestVersion;
-        private String                                 holIndent = "";
 
         public SimpleCallback1(SimpleGUI gui, VizGUI viz, SwingLogPanel span, int verbosity, String latestName, int latestVersion) {
             this.gui = gui;
@@ -230,90 +215,6 @@ public final class SimpleReporter extends A4Reporter {
             if (array[0].equals("bound") && verbosity > 1) {
                 span.log("   " + array[1]);
             }
-            if (array[0].equals("gensol") && verbosity > 0) {
-                span.log("   Generating the solution ");
-                if (verbosity > 2) {
-                    formatLinks(array, 1);
-                }
-                span.log("...");
-                gotoEnd();
-            }
-            if (array[0].equals("hol-start")) {
-                logHOL(array, "started", false);
-            }
-            if (array[0].equals("hol-candidate")) {
-                logHOL(array, " candidate found", false);
-            }
-            if (array[0].equals("hol-verify")) {
-                logHOL(array, "  verifying candidate", true);
-                holIndent(array, "   |- ");
-            }
-            if (array[0].equals("hol-verify-outcome")) {
-                Pair<Integer,String> p = holTrPos.get(array[2]);
-                if (p != null) {
-                    if (array[4] == null) {
-                        String pre = "success (";
-                        String text = "#cand = " + array[5];
-                        span.logAt(p.a, pre);
-                        span.logBoldAt(p.a + pre.length(), text);
-                        span.logAt(p.a + pre.length() + text.length(), ")");
-                    } else {
-                        formatLinkAt(p.a, array[4]);
-                    }
-                    holIndent = p.b;
-                    gotoEnd(false);
-                }
-            }
-            if (array[0].equals("hol-split")) {
-                logHOL(array, "solving splits", false);
-            }
-            if (array[0].equals("hol-next")) {
-                logHOL(array, "  searching for next candidate ", false);
-            }
-            if (array[0].equals("hol-split-choice")) {
-                logHOL(array, "  trying choice", true);
-            }
-            if (array[0].equals("hol-split-choice-sat")) {
-                Integer pos = getHOLpos(array[2]);
-                if (pos != null) {
-                    formatLinkAt(pos, array[4]);
-                    gotoEnd(false);
-                }
-            }
-            if (array[0].equals("hol-split-choice-unsat")) {
-                Integer pos = getHOLpos(array[2]);
-                if (pos != null) {
-                    span.logAt(pos, "unsat");
-                    gotoEnd(false);
-                }
-            }
-            if (array[0].equals("hol-fix-start")) {
-                logHOL(array, "solving fixpoint", false);
-            }
-            if (array[0].equals("hol-fix-unsat")) {
-                logHOL(array, "  no solution found", false);
-            }
-            if (array[0].equals("hol-fix-first")) {
-                logHOL(array, "  first solution found", false);
-            }
-            if (array[0].equals("hol-fix-inc")) {
-                logHOL(array, "  incrementing", true);
-            }
-            if (array[0].equals("hol-fix-inc-sat")) {
-                Integer pos = getHOLpos(array[2]);
-                if (pos != null) {
-                    formatLinkAt(pos, array[4]);
-                    gotoEnd(false);
-                }
-            }
-            if (array[0].equals("hol-fix-inc-unsat")) {
-                Integer pos = getHOLpos(array[2]);
-                if (pos != null) {
-                    span.logAt(pos, "unsat");
-                    gotoEnd(false);
-                }
-            }
-
             if (array[0].equals("resultCNF")) {
                 results.add(null);
                 span.setLength(len3);
@@ -446,108 +347,6 @@ public final class SimpleReporter extends A4Reporter {
             }
             span.flush();
         }
-
-
-        private Integer getHOLpos(Object trId) {
-            Pair<Integer,String> p = holTrPos.get(trId);
-            return p != null ? p.a : null;
-        }
-
-        private void logHOL(Object[] links, String msg, boolean rememberPos) {
-            String trName = links[1].toString();
-            String trId = links[2].toString();
-            String folTrId = trId; //links[3].toString();
-            Integer ord = seenFolTr.get(folTrId);
-            if (ord == null) {
-                ord = seenFolTr.size();
-                seenFolTr.put(trId, ord);
-            }
-            span.log("   ");
-            span.log(holIndent);
-            span.logPaletteBold(trName, ord.intValue());
-            span.log(" " + msg + " ");
-            formatLinks(links, 4);
-            span.log(" ");
-            gotoEnd(false);
-            if (rememberPos) {
-                holTrPos.put(trId, new Pair<Integer,String>(span.getLength(), holIndent));
-            }
-            gotoEnd(true);
-        }
-
-        private void holIndent(Object[] links, String extra) {
-            String trName = links[1].toString();
-            holIndent = holIndent + trName.replaceAll(".", " ") + extra;
-        }
-
-        private void gotoEnd() {
-            gotoEnd(true);
-        }
-
-        private void gotoEnd(boolean newline) {
-            if (newline)
-                span.log("\n");
-            len2 = len3 = len4 = span.getLength();
-        }
-
-        private void formatLinks(Object[] objs, int startIdx) {
-            formatLinks(objs, startIdx, objs.length);
-        }
-
-        private void formatLinks(Object[] objs, int startIdx, int endIdx) {
-            objs = Arrays.copyOfRange(objs, startIdx, endIdx);
-            if (objs.length == 0)
-                return;
-            span.log("(");
-            boolean fst = true;
-            for (Object obj : objs) {
-                if (!fst)
-                    span.log(", ");
-                formatLink((LogLink) obj);
-                fst = false;
-            }
-            span.log(")");
-        }
-
-        @SuppressWarnings("unused" )
-        private void formatLink(Object link) {
-            formatLink((LogLink) link);
-        }
-
-        private void formatLink(LogLink link) {
-            span.logLink(link.label, link.href);
-        }
-
-        private void formatLinkAt(int pos, Object link) {
-            formatLinkAt(pos, (LogLink) link);
-        }
-
-        private void formatLinkAt(int pos, LogLink link) {
-            span.logLink(pos, link.label, link.href);
-        }
-    }
-
-    private void cb(String key, HOLTranslation tr, Serializable... objs) {
-        List<Serializable> sers = new ArrayList<Serializable>(objs.length + 5);
-        String tab = "  "; StringBuilder idn = new StringBuilder("");
-        for (int i = 0; i < tr.depth(); i++) idn.append(tab);
-        sers.add(key);
-        sers.add(idn + "[" + tr.getClass().getSimpleName() + "]");
-        String trId = Integer.toString(System.identityHashCode(tr));
-        if (tr instanceof HOLTranslationNew.OR)
-            trId += "_" + Integer.toString(System.identityHashCode(((HOLTranslationNew.OR) tr).currTr()));
-        else if (tr instanceof HOLTranslationNew.Some4All)
-            trId += "_" + Integer.toString(System.identityHashCode(((HOLTranslationNew.Some4All) tr).convTr()));
-        sers.add(trId);
-        sers.add(System.identityHashCode(tr.getCurrentLTLTranslation()));
-        for (int i = 0; i < objs.length; i++) sers.add(objs[i]);
-        if ("hol-verify-outcome".equals(key) && objs[0] == null) {
-            if (tr instanceof HOLTranslationNew.Some4All)
-                sers.add(((HOLTranslationNew.Some4All) tr).numCandidates());
-            else if (tr instanceof HOLTranslationTemp.Some4All)
-                sers.add(((HOLTranslationTemp.Some4All) tr).numCandidates());
-        }
-        cb(sers.toArray(new Serializable[0]));
     }
 
 
@@ -586,111 +385,7 @@ public final class SimpleReporter extends A4Reporter {
         cb("debug", msg.trim());
     }
 
-    @Override
-    public void generatingSolution(Formula f, Bounds bounds) {
-        cb("gensol", link("formula", f), link("bounds", bounds));
-    }
-
-    @Override
-    public void holLoopStart(HOLTranslation tr, Formula formula, Bounds bounds) {
-        cb("hol-start", tr, link("formula", formula), link("bounds", bounds));
-        System.out.println(String.format("%s* HOL started:", "  ".repeat(indent)));
-        System.out.println(String.format("%s%s", "  ".repeat(indent), formula.toString()));
-        System.out.println(String.format("%s%s", "  ".repeat(indent), bounds.toString().split("\n")[0]));
-    }
-    @Override
-    public void holCandidateFound(HOLTranslation tr, Instance candidate) {
-        cb("hol-candidate", tr, cand(candidate));
-        if (candidate instanceof TemporalInstance) {
-            TemporalInstance ti = (TemporalInstance) candidate;
-            System.out.println(String.format("%s* Candidate found, %d length, %d loop.", "  ".repeat(indent), ti.prefixLength(), ti.loop));
-        } else
-            System.out.println(String.format("%s* Candidate found.", "  ".repeat(indent)));
-    }
-    @Override
-    public void holVerifyingCandidate(HOLTranslation tr, Instance c, Formula cf, Bounds b) {
-        cb("hol-verify", tr, link("condition", cf), link("pi", b));
-        System.out.println(String.format("%s* Verifying candidate.", "  ".repeat(indent)));
-        System.out.println(String.format("%s%s", "  ".repeat(indent), c.shortString().replace("\n", "\n" + "  ".repeat(indent))));
-        System.out.println(String.format("%s%s", "  ".repeat(indent), cf.toString()));
-        indent++;
-        indent++;
-    }
-    @Override
-    public void holCandidateVerified(HOLTranslation tr, Instance candidate) {
-        cb("hol-verify-outcome", tr, (Serializable) null);
-        System.out.println(String.format("%s* Candidate verified, success.", "  ".repeat(indent)));
-        indent--;
-        indent--;
-    }
-    @Override
-    public void holCandidateNotVerified(HOLTranslation tr, Instance cnd, Instance cex) {
-        cb("hol-verify-outcome", tr, cex(cex));
-        if (cex instanceof TemporalInstance) {
-            TemporalInstance ti = (TemporalInstance) cex;
-            System.out.println(String.format("%s* Candidate verified, counter-example %d length, %d loop.", "  ".repeat(indent), ti.prefixLength(), ti.loop));
-        } else
-            System.out.println(String.format("%s* Candidate verified, counter-example.", "  ".repeat(indent)));
-
-        System.out.println(String.format("%s%s", "  ".repeat(indent), cex.shortString().replace("\n", "\n" + "  ".repeat(indent))));
-        //        System.out.println(cex.toString());
-        indent--;
-        indent--;
-    }
-    @Override
-    public void holFindingNextCandidate(HOLTranslation tr, Formula inc) {
-        cb("hol-next", tr, link("increment", inc));
-        System.out.println(String.format("%s* Searching for next candidate (formula).", "  ".repeat(indent)));
-        //        System.out.println(inc.toString());
-    }
-
-    @Override
-    public void holFindingNextCandidate(HOLTranslation tr, Instance inc) {
-        cb("hol-next", tr, link("increment", inc));
-        System.out.println(String.format("%s* Searching for next candidate (instance).", "  ".repeat(indent)));
-        //        System.out.println(inc.toString());
-    }
-
-    int indent = 0;
-
-    @Override
-    public void holSplitStart(HOLTranslation tr, Formula formula) {
-        cb("hol-split", tr, link("formula", formula));
-        System.out.println(String.format("%s* Solving splits.", "  ".repeat(indent)));
-        //        System.out.println(formula.toString());
-    }
-    @Override
-    public void holSplitChoice(HOLTranslation tr, Formula f, Bounds b) {
-        cb("hol-split-choice", tr, link("formula", f), link("bounds", b));
-        System.out.println(String.format("%s* Trying choice:", "  ".repeat(indent)));
-        System.out.println(String.format("%s%s", "  ".repeat(indent), f.toString()));
-        indent++;
-    }
-    @Override
-    public void holSplitChoiceSAT(HOLTranslation tr, Instance inst) {
-        cb("hol-split-choice-sat", tr, link("instance", inst));
-        System.out.println(String.format("%s* Split outcome (sat):", "  ".repeat(indent)));
-        indent--;
-    }
-    @Override
-    public void holSplitChoiceUNSAT(HOLTranslation tr) {
-        cb("hol-split-choice-unsat", tr);
-        System.out.println(String.format("%s* Split outcome (unsat):", "  ".repeat(indent)));
-        indent--;
-    }
-
-    @Override
-    public void holFixpointStart(HOLTranslation tr, Formula formula, Bounds bounds) { cb("hol-fix-start", tr, link("formula", formula), link("bounds", bounds)); }
-    @Override
-    public void holFixpointNoSolution(HOLTranslation tr)                            { cb("hol-fix-unsat", tr); }
-    @Override
-    public void holFixpointFirstSolution(HOLTranslation tr, Instance candidate)     { cb("hol-fix-first", tr, link("instance", candidate)); }
-    @Override
-    public void holFixpointIncrementing(HOLTranslation tr, Formula inc)             { cb("hol-fix-inc", tr, link("formula", inc)); }
-    @Override
-    public void holFixpointIncrementingOutcome(HOLTranslation tr, Instance next)    { if (next != null) cb("hol-fix-inc-sat", tr, link("instance", next)); }
-
-        /** {@inheritDoc} */
+    /** {@inheritDoc} */
     @Override
     public void translate(String solver, int bitwidth, int maxseq, int mintrace, int maxtrace, int skolemDepth, int symmetry, String strat) {
         startTime = System.currentTimeMillis();
@@ -850,10 +545,6 @@ public final class SimpleReporter extends A4Reporter {
             cb("unsat", cmd.check, cmd.expects, minimized - lastTime, formulafilename, corefilename, minimizedBefore, minimizedAfter, (System.currentTimeMillis() - minimized));
     }
 
-    private Serializable cand(Instance inst)            { return new LogLink("candidate", inst, null, "candidate"); }
-    private Serializable cex(Instance inst)             { return new LogLink("counterexample", inst, null, "cex"); }
-    private Serializable link(String label, Object obj) { return new LogLink(label, obj, null); }
-
     private final WorkerCallback cb;
 
     // ========== These fields should be set each time we execute a set of
@@ -928,8 +619,6 @@ public final class SimpleReporter extends A4Reporter {
      * TranslateAlloyToMetamodel; this field must be synchronized.
      */
     private static String                  latestMetamodelXML = null;
-
-    private static int                     inst_cnt           = 0;
 
     /** Constructor is private. */
     private SimpleReporter(WorkerCallback cb, boolean recordKodkod) {
@@ -1050,9 +739,9 @@ public final class SimpleReporter extends A4Reporter {
             boolean transformer = false;
             cb(out, "S2", "Starting the solver...\n\n");
             final SimpleReporter rep = new SimpleReporter(out, options.recordKodkod);
-            Module world = CompUtil.parseEverything_fromFile(rep, map, options.originalFilename, resolutionMode);
-            List<Sig> sigs = world.getAllReachableSigs();
-            ConstList<Command> cmds = world.getAllCommands();
+            final Module world = CompUtil.parseEverything_fromFile(rep, map, options.originalFilename, resolutionMode);
+            final List<Sig> sigs = world.getAllReachableSigs();
+            final ConstList<Command> cmds = world.getAllCommands();
             cb(out, "warnings", bundleWarningNonFatal);
             if (rep.warn > 0 && !bundleWarningNonFatal)
                 return;
@@ -1075,13 +764,6 @@ public final class SimpleReporter extends A4Reporter {
             } else
                 for (int i = 0; i < cmds.size(); i++)
                     if (bundleIndex < 0 || i == bundleIndex) {
-                        // if (Execute All) && (not executing first command) && (using higher-order solver) => must rebuild world because of atomSigs
-                        if (bundleIndex<0 && i>0 && options.higherOrderSolver) {
-                            cb(out, "", "Rebuilding world because higher-order solver is used.\n");
-                            world = CompUtil.parseEverything_fromFile(rep, map, options.originalFilename, resolutionMode);
-                            sigs = world.getAllReachableSigs();
-                            cmds = world.getAllCommands();
-                        }
                         synchronized (SimpleReporter.class) {
                             latestModule = world;
                             latestKodkodSRC = ConstMap.make(map);
@@ -1157,62 +839,6 @@ public final class SimpleReporter extends A4Reporter {
             if (exc != null)
                 throw exc;
 
-        }
-    }
-
-    static class LogLink implements Serializable {
-        private static final long serialVersionUID = 140775378800533167L;
-        transient final Object obj;
-        transient final String tempdir;
-        final String label;
-        final String kind;
-        final String href;
-
-        LogLink(String label, Object obj, String tempdir)              { this(label, obj, tempdir, label); }
-        LogLink(String label, Object obj, String tempdir, String kind) {
-            this.obj = obj;
-            this.label = label;
-            this.kind = kind;
-            this.tempdir = tempdir;
-            this.href = _href(latestKodkod);
-        }
-
-        private String _href(A4Solution sol) {
-            if (obj instanceof Formula) {
-                Formula n = (Formula) obj;
-                //n = FullNegationPropagator.toNNF(AnnotatedNode.annotate(n)).node();
-                return A4Preferences.HOLSaveFormulas.get() ? "MSG: " + PrettyPrinter.print(n, 0) : null;
-            } else if (obj instanceof Instance) {
-                InstFormat fmt = InstFormat.NOTHING;
-                if ("candidate".equals(kind) || "instance".equals(kind))
-                    fmt = A4Preferences.HOLSaveCandidates.get();
-                if ("cex".equals(kind))
-                    fmt = A4Preferences.HOLSaveCex.get();
-                //                if (fmt == InstFormat.VIZ && sol != null)
-                //                    return "XML: " + createAndSaveTmpSolution(sol, (Instance) obj);
-                //                else
-                if (fmt == InstFormat.TEXT)
-                    return "MSG: " + ((Instance) obj).toPrettyString();
-                else
-                    return null;
-            } else if (obj instanceof Bounds) {
-                return A4Preferences.HOLSavePI.get() ? "MSG: " + obj.toString() : null;
-            } else if (obj == null) {
-                return "MSG: null";
-            } else {
-                return "MSG: " + obj.toString();
-            }
-        }
-
-        private String createAndSaveTmpSolution(A4Solution sol, Instance inst) {
-            String filename = tempdir + File.separatorChar + (kind != null ? kind : "inst") + "_" + (inst_cnt++) + ".xml";
-            try {
-                sol.writeXMLFor(inst, filename);
-                return filename;
-            } catch (Err e) {
-                e.printStackTrace();
-                return null;
-            }
         }
     }
 }

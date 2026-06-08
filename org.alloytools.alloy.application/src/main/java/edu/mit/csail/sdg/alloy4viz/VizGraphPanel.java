@@ -71,7 +71,7 @@ public final class VizGraphPanel extends JPanel {
     private static final long              serialVersionUID    = 0;
 
     /** This is the current customization settings of each graph panel. */
-    private final List<List<VizState>>     vizState;
+    private final List<VizState>           vizState;
 
     /**
      * Whether the user wants to see the DOT source code or not.
@@ -100,7 +100,7 @@ public final class VizGraphPanel extends JPanel {
     /**
      * The splitpane separating the graphPanel and the navPanel.
      */
-    private final List<JSplitPane>         split               = new ArrayList<JSplitPane>();
+    private final JSplitPane               split;
 
     /**
      * The current projection choice; null if no projection is in effect.
@@ -146,7 +146,7 @@ public final class VizGraphPanel extends JPanel {
             if (!this.atoms.equals(atoms))
                 return false;
             for (int i = 0; i < this.atoms.size(); i++) {
-                String n = this.atoms.get(i).getVizName(vizState.get(0).get(0), true);
+                String n = this.atoms.get(i).getVizName(vizState.get(0), true);
                 if (!atomnames[i].equals(n))
                     return false;
             }
@@ -171,7 +171,7 @@ public final class VizGraphPanel extends JPanel {
             setBorder(null);
             this.atomnames = new String[this.atoms.size()];
             for (int i = 0; i < this.atoms.size(); i++) {
-                atomnames[i] = this.atoms.get(i).getVizName(vizState.get(0).get(0), true);
+                atomnames[i] = this.atoms.get(i).getVizName(vizState.get(0), true);
                 if (this.atoms.get(i).equals(initialValue))
                     initialIndex = i;
             }
@@ -259,7 +259,7 @@ public final class VizGraphPanel extends JPanel {
      * @param seeDot - true if we want to see the DOT source code, false if we want
      *            it rendered as a graph
      */
-    public VizGraphPanel(JFrame parent, List<List<VizState>> vizState, boolean seeDot) {
+    public VizGraphPanel(JFrame parent, List<VizState> vizState, boolean seeDot) {
         Border b = new EmptyBorder(0, 0, 0, 0);
         OurUtil.make(this, Color.BLACK, Color.WHITE, b);
         this.seeDot = seeDot;
@@ -272,19 +272,17 @@ public final class VizGraphPanel extends JPanel {
         // [electrum] container for all (diagram scroll) graph panels
         JPanel diagramsScrollPanels = new JPanel();
         diagramsScrollPanels.setLayout(new BoxLayout(diagramsScrollPanels, BoxLayout.LINE_AXIS));
-        for (List<VizState> vizs : vizState) {
-            for (int i = 0; i < vizs.size(); i++) {
-                JScrollPane diagramScrollPanel = createGraphPanel(i);
-                diagramScrollPanels.add(diagramScrollPanel);
-                diagramsScrollPanels.add(diagramScrollPanel);
-                diagramScrollPanel.setPreferredSize(new Dimension(0, 0));
-            }
-            JSplitPane splitt = OurUtil.splitpane(JSplitPane.VERTICAL_SPLIT, diagramsScrollPanels, navscroll, 0);
-            splitt.setResizeWeight(1.0);
-            splitt.setDividerSize(0);
-            add(splitt);
-            split.add(splitt);
+        for (int i = 0; i < vizState.size(); i++) {
+            JScrollPane diagramScrollPanel = createGraphPanel(i);
+            diagramScrollPanels.add(diagramScrollPanel);
+            diagramsScrollPanels.add(diagramScrollPanel);
+            diagramScrollPanel.setPreferredSize(new Dimension(0, 0));
         }
+
+        split = OurUtil.splitpane(JSplitPane.VERTICAL_SPLIT, diagramsScrollPanels, navscroll, 0);
+        split.setResizeWeight(1.0);
+        split.setDividerSize(0);
+        add(split);
         remakeAll(parent);
     }
 
@@ -343,8 +341,8 @@ public final class VizGraphPanel extends JPanel {
         Map<AlloyType,AlloyAtom> map = new LinkedHashMap<AlloyType,AlloyAtom>();
         navPanel.removeAll();
         // [electrum] this info is the same in all viz states
-        for (AlloyType type : vizState.get(0).get(vizState.size() - 1).getProjectedTypes()) {
-            List<AlloyAtom> atoms = vizState.get(0).get(vizState.size() - 1).getOriginalInstance().type2atoms(type);
+        for (AlloyType type : vizState.get(vizState.size() - 1).getProjectedTypes()) {
+            List<AlloyAtom> atoms = vizState.get(vizState.size() - 1).getOriginalInstance().type2atoms(type);
             TypePanel tp = type2panel.get(type);
             if (tp != null && tp.getAlloyAtom() != null && !atoms.contains(tp.getAlloyAtom()))
                 tp = null;
@@ -361,31 +359,29 @@ public final class VizGraphPanel extends JPanel {
         List<GraphViewer> prevsv = viewer;
         // [electrum] update all graph panels
         viewer = new ArrayList<>(vizState.size());
-        for (List<VizState> vizs : vizState)
-            for (int i = 0; i < vizs.size(); i++) {
-                JPanel graph = vizs.get(i).getGraph(parent, currentProjection);
-                if (seeDot && (graph instanceof GraphViewer)) {
+        for (int i = 0; i < vizState.size(); i++) {
+            JPanel graph = vizState.get(i).getGraph(parent, currentProjection);
+            if (seeDot && (graph instanceof GraphViewer)) {
+                viewer = null;
+                JTextArea txt = OurUtil.textarea(graph.toString(), 10, 10, false, true, getFont());
+                diagramScrollPanels.get(i).setViewportView(txt);
+            } else {
+                if (graph instanceof GraphViewer) {
+                    viewer.add((GraphViewer) graph);
+                    if (prevsv != null && i <= prevsv.size())
+                        viewer.get(i).setScale(((GraphViewer) graph).getScale());
+                } else
                     viewer = null;
-                    JTextArea txt = OurUtil.textarea(graph.toString(), 10, 10, false, true, getFont());
-                    diagramScrollPanels.get(i).setViewportView(txt);
-                } else {
-                    if (graph instanceof GraphViewer) {
-                        viewer.add((GraphViewer) graph);
-                        if (prevsv != null && i <= prevsv.size())
-                            viewer.get(i).setScale(((GraphViewer) graph).getScale());
-                    } else
-                        viewer = null;
-                    graphPanels.get(i).removeAll();
-                    graphPanels.get(i).add(graph);
-                    graphPanels.get(i).setBackground(Color.WHITE);
-                    diagramScrollPanels.get(i).setViewportView(graphPanels.get(i));
-                    diagramScrollPanels.get(i).invalidate();
-                    diagramScrollPanels.get(i).repaint();
-                    diagramScrollPanels.get(i).validate();
-                }
+                graphPanels.get(i).removeAll();
+                graphPanels.get(i).add(graph);
+                graphPanels.get(i).setBackground(Color.WHITE);
+                diagramScrollPanels.get(i).setViewportView(graphPanels.get(i));
+                diagramScrollPanels.get(i).invalidate();
+                diagramScrollPanels.get(i).repaint();
+                diagramScrollPanels.get(i).validate();
             }
-        for (JSplitPane splitt : split)
-            splitt.setDividerLocation(splitt.getSize().height - splitt.getInsets().bottom - splitt.getDividerSize() - splitt.getRightComponent().getPreferredSize().height);
+        }
+        split.setDividerLocation(split.getSize().height - split.getInsets().bottom - split.getDividerSize() - split.getRightComponent().getPreferredSize().height);
     }
 
     /** Changes the font. */
@@ -407,7 +403,7 @@ public final class VizGraphPanel extends JPanel {
 
     public String toDot(JFrame parent) {
         // [electrum] only converts the first shown state
-        return vizState.get(0).get(0).getGraph(parent, currentProjection).toString();
+        return vizState.get(0).getGraph(parent, currentProjection).toString();
     }
 
     /**

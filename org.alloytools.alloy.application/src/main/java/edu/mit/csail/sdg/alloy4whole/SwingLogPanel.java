@@ -52,14 +52,6 @@ import edu.mit.csail.sdg.alloy4.OurUtil;
 
 final class SwingLogPanel {
 
-    public static final String[] paletteHex = new String[] {
-                                                            "#000000", "#2E8B57", "#FF00FF", "#696969", "#FF1493", "#A0522D", "#9932CC", "#008B8B", "#228B22", "#556B2F", "#8A2BE2", "#008080", "#C71585", "#8B4513", "#A52A2A", "#FF0000", "#008000", "#483D8B", "#2F4F4F", "#9400D3", "#006400", "#8B008B", "#8B0000", "#4B0082", "#191970", "#0000FF"
-    };
-
-    public static Color hex2Rgb(String colorStr) {
-        return new Color(Integer.valueOf(colorStr.substring(1, 3), 16), Integer.valueOf(colorStr.substring(3, 5), 16), Integer.valueOf(colorStr.substring(5, 7), 16));
-    }
-
     /**
      * Try to wrap the input to about 60 characters per line; however, if a token is
      * too long, we won't break it.
@@ -108,8 +100,6 @@ final class SwingLogPanel {
 
     /** The style to use when writing red messages. */
     private final Style              styleRed;
-
-    private final Style[]            palette, paletteBold;
 
     /**
      * This stores the JLabels used for displaying hyperlinks.
@@ -232,22 +222,6 @@ final class SwingLogPanel {
         StyleConstants.setForeground(styleRed, red);
         parent.setViewportView(log);
         parent.setBackground(background);
-        this.palette = new Style[paletteHex.length];
-        this.paletteBold = new Style[paletteHex.length];
-        for (int i = 0; i < palette.length; i++) {
-            Style st = doc.addStyle("palette" + i, null);
-            palette[i] = st;
-            StyleConstants.setFontFamily(st, fontName);
-            StyleConstants.setFontSize(st, fontSize);
-            StyleConstants.setForeground(st, hex2Rgb(paletteHex[i]));
-
-            st = doc.addStyle("paletteBold" + i, null);
-            paletteBold[i] = st;
-            StyleConstants.setFontFamily(st, fontName);
-            StyleConstants.setFontSize(st, fontSize);
-            StyleConstants.setBold(st, true);
-            StyleConstants.setForeground(st, hex2Rgb(paletteHex[i]));
-        }
     }
 
     /** Write a horizontal separator into the log window. */
@@ -272,15 +246,10 @@ final class SwingLogPanel {
 
     /** Write a clickable link into the log window. */
     public void logLink(final String link, final String linkDestination) {
-        logLink(null, link, linkDestination);
-    }
-
-    public void logLink(final Integer pos, final String link, final String linkDestination) {
         if (log == null || link.length() == 0)
             return;
         if (linkDestination == null || linkDestination.length() == 0) {
-            flush();
-            logAt(pos, link);
+            log(link);
             return;
         }
         clearError();
@@ -291,28 +260,32 @@ final class SwingLogPanel {
         label.setMaximumSize(label.getPreferredSize());
         label.addMouseListener(new MouseListener() {
 
+            @Override
             public final void mousePressed(MouseEvent e) {
                 if (handler != null)
                     handler.doVisualize(linkDestination);
             }
 
-            public final void mouseClicked(MouseEvent e) {
-            }
+            @Override
+            public final void mouseClicked(MouseEvent e) {}
 
-            public final void mouseReleased(MouseEvent e) {
-            }
+            @Override
+            public final void mouseReleased(MouseEvent e) {}
 
+            @Override
             public final void mouseEntered(MouseEvent e) {
                 label.setForeground(hoverColor);
             }
 
+            @Override
             public final void mouseExited(MouseEvent e) {
                 label.setForeground(linkColor);
             }
         });
         StyleConstants.setComponent(linkStyle, label);
         links.add(label);
-        reallyLog(pos, ".", linkStyle); // Any character would do; the "." will be replaced by the JLabel
+        reallyLog(".", linkStyle); // Any character would do; the "." will be
+                                  // replaced by the JLabel
         log.setCaretPosition(doc.getLength());
         lastSize = doc.getLength();
     }
@@ -331,18 +304,7 @@ final class SwingLogPanel {
         }
     }
 
-    public void logBoldAt(int pos, String msg) {
-        if (msg.length() > 0) {
-            clearError();
-            reallyLog(pos, msg, styleBold);
-        }
-    }
-
     private void reallyLog(String text, Style style) {
-        reallyLog(null, text, style);
-    }
-
-    private void reallyLog(Integer pos, String text, Style style) {
         if (log == null || text.length() == 0)
             return;
         int i = text.lastIndexOf('\n'), j = text.lastIndexOf('\r');
@@ -351,8 +313,8 @@ final class SwingLogPanel {
         }
         StyledDocument doc = log.getStyledDocument();
         try {
-            if (i < 0 || pos != null) {
-                doc.insertString(pos != null ? pos : doc.getLength(), text, style);
+            if (i < 0) {
+                doc.insertString(doc.getLength(), text, style);
             } else {
                 // Performs intelligent caret positioning
                 doc.insertString(doc.getLength(), text.substring(0, i + 1), style);
@@ -368,15 +330,6 @@ final class SwingLogPanel {
             lastSize = doc.getLength();
         }
     }
-
-    public void logAt(Integer pos, String text) {
-        logAt(pos, text, styleRegular);
-    }
-
-    public void logAt(Integer pos, String text, Style style) {
-        reallyLog(pos, text, style);
-    }
-
 
     /** Write "msg" in red style (with automatic line wrap). */
     public void logRed(String msg) {
@@ -532,18 +485,4 @@ final class SwingLogPanel {
         if (batch.size() > 0)
             clearError();
     }
-
-    public void logPaletteBold(String text, int paletteIdx) {
-        logPalette(paletteBold, text, paletteIdx);
-    }
-
-    public void logPalette(String text, int paletteIdx) {
-        logPalette(palette, text, paletteIdx);
-    }
-
-    private void logPalette(Style[] palette, String text, int paletteIdx) {
-        flush();
-        reallyLog(text, palette[paletteIdx % palette.length]);
-    }
-
 }
