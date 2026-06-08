@@ -3,7 +3,10 @@ import os
 def inst2smv_ah(run_dir, input_ah, stem):
     with open(input_ah, "r") as f:
         lines = f.readlines()
-        # If first line isn't ======= Witnesses ======= then return saying there's no witnesses
+        # Skip the first lines before ======= Witnesses ======= that start with integers
+        while lines[0].strip().isdigit():
+            lines.pop(0)
+        # If first line after the integers isn't ======= Witnesses ======= then return saying there's no witnesses
         if lines[0].strip() != "======= Witnesses =======":
             print("No witnesses found.")
             return

@@ -332,7 +332,7 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
                         argsDocker.add("--rm");
                         argsDocker.add("-v");
                         argsDocker.add(tempDir.getAbsolutePath() + ":/mnt");
-                        argsDocker.add("hugopacheco/hypercheckers-amd64");
+                        argsDocker.add("hyperalloy/hypercheckers");
 
                         if (id().equals("hyper.autohyper")) {   // AutoHyper
                             argsDocker.add("AutoHyper");
