@@ -579,6 +579,15 @@ public final class A4Solution {
         solved = true;
     }
 
+    /**
+     * Returns a copy of this solution backed by a different TemporalInstance.
+     * All Alloy-level metadata is re-derived from the new instance via rename().
+     * Used by SimpleReporter to write sidecar .cnf.xml files for hyper-traces.
+     */
+    public A4Solution withTemporalInstance(TemporalInstance ti) throws Err {
+        return new A4Solution(this, (Instance) ti);
+    }
+
 
     /**
      * Turn the solved flag to be true, and make all remaining fields immutable.

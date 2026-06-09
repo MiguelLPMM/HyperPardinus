@@ -57,6 +57,7 @@ import java.util.StringJoiner;
 import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.Comparator;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -1322,6 +1323,7 @@ public final class VizGUI implements ComponentListener {
         File f = new File(xmlFileName);
         File folder = f.getParentFile();
         File[] xmlFiles = folder.listFiles((dir, name) -> name.endsWith(".cnf.xml"));
+        // TODO: multiple executions at the same time lead to 0.cnf.xml, 1.cnf.xml, etc. files; only load the ones relevant to the current execution by checking the number at the beggining
         if (!forcefully)
             seg_iteration = false;
         if (forcefully || !xmlFileName.equals(this.xmlFileName)) {
@@ -1331,6 +1333,9 @@ public final class VizGUI implements ComponentListener {
                 myTraces.clear();
                 for (File xmlFile : xmlFiles) {
                     String traceName = xmlFile.getName().replaceFirst("\\.cnf\\.xml$", "");
+                    traceName = traceName.replaceAll("\\d", "");
+                    if (traceName.equals(""))
+                        traceName = "A";
                     String traceFilePath = Util.canon(xmlFile.getPath());
                     List<VizState> states = new ArrayList<VizState>();
                     for (int i = 0; i < statepanes; i++) {
@@ -1353,6 +1358,7 @@ public final class VizGUI implements ComponentListener {
                         }
                     }
                 }
+                myTraces.sort(Comparator.comparing(VizTrace::getName));
             } catch (Throwable e) {
                 xmlLoaded.remove(fileName);
                 xmlLoaded.remove(xmlFileName);

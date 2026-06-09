@@ -60,6 +60,8 @@ import edu.mit.csail.sdg.translator.A4Solution;
 import edu.mit.csail.sdg.translator.A4SolutionReader;
 import edu.mit.csail.sdg.translator.A4SolutionWriter;
 import edu.mit.csail.sdg.translator.TranslateAlloyToKodkod;
+import kodkod.instance.TemporalInstance;
+import kodkod.instance.HyperTraceStash;
 
 /**
  * This helper method is used by SimpleGUI.
@@ -778,6 +780,27 @@ public final class SimpleReporter extends A4Reporter {
                             ai = TranslateAlloyToKodkod.execute_commandFromBook(rep, world.getAllReachableSigs(), cmd, options);
                         } catch (Exception e1) {
                             exc = e1;
+                        }
+                        if (ai != null && ai.satisfiable()) {
+                            List<TemporalInstance> extras = HyperTraceStash.extraTraces.get();
+                            try {
+                                if (extras != null && !extras.isEmpty()) {
+                                    for (int j = 0; j < extras.size(); j++) {
+                                        try {
+                                            String traceId = String.valueOf((char)('B' + j));
+                                            String sidecarPath = tempdir + File.separatorChar + i + traceId + ".cnf.xml";
+                                            A4Solution sidecar = ai.withTemporalInstance(extras.get(j));
+                                            PrintWriter pw = new PrintWriter(sidecarPath, "UTF-8");
+                                            sidecar.writeXML(rep, pw, world.getAllFunc(), ConstMap.make(map));
+                                            pw.close();
+                                        } catch (Exception ex) {
+                                            rep.warning(new ErrorWarning("Could not write sidecar trace " + j + ": " + ex));
+                                        }
+                                    }
+                                }
+                            } finally {
+                                HyperTraceStash.extraTraces.remove();
+                            }
                         }
                         if (ai == null)
                             result.add(null);

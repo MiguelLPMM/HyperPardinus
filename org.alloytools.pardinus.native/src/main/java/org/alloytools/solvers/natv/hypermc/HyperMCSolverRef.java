@@ -47,6 +47,7 @@ import kodkod.instance.Instance;
 import kodkod.instance.PardinusBounds;
 import kodkod.instance.TemporalInstance;
 import kodkod.instance.TupleSet;
+import kodkod.instance.HyperTraceStash;
 import kodkod.solvers.api.NativeCode;
 import kodkod.solvers.api.TemporalSolverFactory;
 import kodkod.util.nodes.AnnotatedNode;
@@ -400,8 +401,8 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
                         if (exitPython != 0) {
                             reporter.debug("inst2smv.py exited with code " + exitPython);
                         }
-                        
-                        // Number of traces in the counterexample
+
+                        // Number of traces in the counterexample (end with .out and have a -) // But here another one is required I don't know why
                         int numTraces = (int) Files.list(tempDir.toPath())
                             .filter(path -> path.getFileName().toString()
                             .endsWith(".out")).count();
@@ -446,58 +447,82 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
                             }
                         }
 
-                        File xmlFile = new File(tempDir, stem + "-" + "A" + ".xml");
+                        numTraces = (int) Files.list(tempDir.toPath())
+                            .filter(path -> path.getFileName().toString()
+                            .endsWith(".xml") && path.getFileName().toString().contains("-")).count();
+
+                        File xmlFileA = new File(tempDir, stem + "-A.xml");
                         String xmlLink = String.format("%05d.xml", bounds.integration);
                         File link = new File(tempDir, xmlLink);
-                        Files.createLink(link.toPath(), xmlFile.toPath());
+                        Files.createLink(link.toPath(), xmlFileA.toPath());
+
+                        List<TemporalInstance> extras = new ArrayList<>();
+                        TemporalInstance temporalInstanceA = null;
+
+                        ElectrodReader rdA = null;
 
                         TupleSet atom = bounds.upperBound((Relation) options.isLast().get(2));
 
-                        ElectrodReader rd = new ElectrodReader(bounds, rel2name, atom);
-                        TemporalInstance temporalInstance = rd.read(read(xmlFile));
+                        for (int j = 0; j < numTraces; j++) {
+                            try {
+                                String traceId = String.valueOf((char)('A' + j));
+                                File xmlFile = new File(tempDir, stem + "-" + traceId + ".xml");
+                                ElectrodReader rd = new ElectrodReader(bounds, rel2name, atom);
+                                TemporalInstance temporalInstance = rd.read(read(xmlFile));
 
-                        Bounds outerbds = (Bounds) options.isLast().get(3);
+                                Bounds outerbds = (Bounds) options.isLast().get(3);
 
-                        List<Instance> new_instances = new ArrayList<Instance>();
-                        // project into outermost quantifier trace
-                        for (int i = 0; i < temporalInstance.prefixLength(); i++) {
-                            Instance instance = new Instance(outerbds.universe());
-                            for (Relation r : outerbds.relations()) {
-                                for (Relation r2 : temporalInstance.state(i).relations()) {
-                                    if (r.name().equals(r2.name())) {
-                                        TupleSet ts;
+                                List<Instance> new_instances = new ArrayList<Instance>();
+                                // project into outermost quantifier trace
+                                for (int i = 0; i < temporalInstance.prefixLength(); i++) {
+                                    Instance instance = new Instance(outerbds.universe());
+                                    for (Relation r : outerbds.relations()) {
+                                        for (Relation r2 : temporalInstance.state(i).relations()) {
+                                            if (r.name().equals(r2.name())) {
+                                                TupleSet ts;
 
-                                        if (r.arity() == r2.arity())
-                                            ts = temporalInstance.state(i).tuples(r2);
-                                        else {
-                                            ts = bounds.universe().factory().noneOf(r.arity());
-                                            temporalInstance.state(i).tuples(r2).forEach(t -> {
-                                                List<Object> ats = new ArrayList();
-                                                for (int k = 1; k < r2.arity(); k++)
-                                                    ats.add(t.atom(k));
-                                                ts.add(bounds.universe().factory().tuple(ats));
-                                            });
+                                                if (r.arity() == r2.arity())
+                                                    ts = temporalInstance.state(i).tuples(r2);
+                                                else {
+                                                    ts = bounds.universe().factory().noneOf(r.arity());
+                                                    temporalInstance.state(i).tuples(r2).forEach(t -> {
+                                                        List<Object> ats = new ArrayList();
+                                                        for (int k = 1; k < r2.arity(); k++)
+                                                            ats.add(t.atom(k));
+                                                        ts.add(bounds.universe().factory().tuple(ats));
+                                                    });
 
+                                                }
+
+                                                instance.add(r, TemporalBoundsExpander.convertToUniv(ts, outerbds.universe()));
+                                                break;
+                                            }
                                         }
+                                        if (!instance.contains(r))
+                                            if (outerbds.lowerBound(r).size() == outerbds.upperBound(r).size())
+                                                instance.add(r, outerbds.upperBound(r));
+                                            else
+                                                throw new RuntimeException("Unbound relation: " + r);
 
-                                        instance.add(r, TemporalBoundsExpander.convertToUniv(ts, outerbds.universe()));
-                                        break;
                                     }
+                                    new_instances.add(instance);
                                 }
-                                if (!instance.contains(r))
-                                    if (outerbds.lowerBound(r).size() == outerbds.upperBound(r).size())
-                                        instance.add(r, outerbds.upperBound(r));
-                                    else
-                                        throw new RuntimeException("Unbound relation: " + r);
 
-                            }
-                            new_instances.add(instance);
+                                temporalInstance = new TemporalInstance(new_instances, temporalInstance.loop, temporalInstance.unrolls);
+
+                                if (j == 0) {
+                                    temporalInstanceA = temporalInstance;
+                                    rdA = rd;
+                                } else {
+                                    extras.add(temporalInstance);
+                                }
+                            } catch (Exception e) {}
                         }
 
-                        temporalInstance = new TemporalInstance(new_instances, temporalInstance.loop, temporalInstance.unrolls);
+                        HyperTraceStash.extraTraces.set(new ArrayList<>(extras));
 
-                        Statistics stats = new Statistics(rd.nbvars, 0, 0, rd.ctime, rd.atime);
-                        Solution solution = temporalInstance == null ? Solution.unsatisfiable(stats, null) : Solution.satisfiable(stats, temporalInstance);
+                        Statistics stats = new Statistics(rdA.nbvars, 0, 0, rdA.ctime, rdA.atime);
+                        Solution solution = temporalInstanceA == null ? Solution.unsatisfiable(stats, null) : Solution.satisfiable(stats, temporalInstanceA);
                         return solution;
                     } else {
                         File hpFile = new File("prop.hp");
