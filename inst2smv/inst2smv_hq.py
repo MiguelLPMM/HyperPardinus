@@ -76,6 +76,10 @@ def inst2smv_hq(run_dir, input_qcir, input_quabs, stem):
                 elif line[1:].strip() == "UNSAT":
                     sat = "Counterexample"
     
+    # Only keep variables that were assigned by quabs (present in the relevant trace)
+    variables = {k: v for k, v in variables.items() if v["value"] is not None}
+    traces = {v["trace"] for v in variables.values()}
+    
     # All variables with _ in their names are part of a bitvector
     # Group them by their base name (before the first _) and trace and state
     # Store them in a dictionary where the key is (trace, state, base_name) and the value is the decimal value of the bitvector (suffix = 0 is the LSB)
