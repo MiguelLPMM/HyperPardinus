@@ -64,6 +64,7 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
     final File                electrod;
     final File                solver;
     final String              solverId;
+    private static int        dryExecutuion = 0;
 
     class HyperMCSolver implements HyperSolver<ExtendedOptions> {
 
@@ -228,8 +229,9 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
                 String stem = System.getProperty("hypermcs.stem");
 
                 if (dry) {
-                    File smv = new File(tempDir.getParentFile(), stem + ".smv");
+                    File smv = new File(tempDir.getParentFile(), stem + "-" + (char)('A' + dryExecutuion) + ".smv");
                     Files.copy(smvFile.toPath(), smv.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    dryExecutuion++;
                 }
 
                 if (!dry) {
@@ -282,9 +284,13 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
                         // exitCode = process.waitFor();
 
                         // HyperSMV
-                        File localFile  = new File(tempDir, stem + ".smv");
-                        Path smvPath = Path.of(tempDir.getParentFile().getAbsolutePath(), stem + ".smv");
-                        Files.copy(smvPath, localFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        List<File> localFiles = new ArrayList<>();
+                        for (int i = 0; i < quantifiers; i++) {
+                            File localFile  = new File(tempDir, stem + "-" + (char)('A' + i) + ".smv");
+                            Path smvPath = Path.of(tempDir.getParentFile().getAbsolutePath(), stem + "-" + (char)('A' + i) + ".smv");
+                            Files.copy(smvPath, localFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                            localFiles.add(localFile);
+                        }
                         
                         File hs = NativeCode.platform.getExecutable("hypersmv").orElse(null);
                         List<String> argsHS = new ArrayList<String>();
@@ -292,7 +298,7 @@ abstract class HyperMCSolverRef extends SATFactory implements TemporalSolverFact
                         argsHS.add("tomc");
                         for (int i = 0; i < quantifiers; i++) {
                             argsHS.add("-i");
-                            argsHS.add(localFile.getAbsolutePath());
+                            argsHS.add(localFiles.get(i).getAbsolutePath());
                         }
                         List<String> outputFiles = new ArrayList<String>();
                         for (int i = 0; i < quantifiers; i++) {

@@ -117,7 +117,7 @@ def inst2smv_hq(run_dir, input_qcir, input_quabs, stem):
         variables[new_var_num] = {"trace": trace, "state": state, "name": base_name, "value": str(decimal_value)}
 
     # Get the unsanitized variable names
-    names_file = os.path.join(run_dir, stem + ".smv.names")
+    names_file = os.path.join(run_dir, stem + "-A.smv.names") #Trace A, assuming both .names will be the same
     with open(names_file, "r") as names_f:
         names_lines = names_f.readlines()
         names_dict = {}
